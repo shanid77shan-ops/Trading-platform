@@ -21,6 +21,7 @@ import {
   Check,
 } from "lucide-react";
 import type { Account, UserProfile } from "@/lib/types";
+import { WalletConnectButton } from "@/components/web3/WalletConnectButton";
 
 interface GridItem {
   label: string;
@@ -165,6 +166,10 @@ export function ProfileView() {
         </div>
         <ChevronRight size={20} className="shrink-0 text-[#5a6a7e]" />
       </Link>
+
+      <div className="mt-5 px-4">
+        <WalletConnectButton />
+      </div>
 
       <GridSection title="Assets" items={assetItems} />
       <GridSection title="Rewards" items={rewardItems} />
