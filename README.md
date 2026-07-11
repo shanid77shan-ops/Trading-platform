@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TradeHub - Trading Platform
+
+A mobile-first trading platform built with Next.js, matching the STARTRADER-style UI from your reference images.
+
+## Features
+
+- **Home Dashboard** — Account equity, floating PnL, margin level, and market watchlist
+- **Category Tabs** — Watchlist, Crypto, Forex, Commodities, Indices, Metals, Share CFDs, ETF
+- **Live Prices** — Simulated real-time price updates every 2 seconds
+- **Chart View** — Candlestick chart with EMAs, volume, buy/sell panel, lot sizing
+- **Trading** — One-tap buy/sell execution with position tracking
+- **Admin Dashboard** — Manage symbols, account settings, and platform config
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+cd trading-app
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) for the trading app.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open [http://localhost:3000/admin](http://localhost:3000/admin) for the management dashboard.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Pages
 
-## Learn More
+| Route | Description |
+|-------|-------------|
+| `/` | Home — market watchlist |
+| `/chart/[symbol]` | Chart & trading (e.g. `/chart/btcusd`) |
+| `/trades` | Open positions |
+| `/admin` | Platform management |
+| `/profile` | User profile + admin link |
 
-To learn more about Next.js, take a look at the following resources:
+## Admin Capabilities
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Add, edit, and delete trading symbols
+- Adjust account balance, margin, and equity
+- Configure platform name and default lot size
+- View trade history and overview stats
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Tech Stack
 
-## Deploy on Vercel
+- Next.js 16 (App Router)
+- TypeScript
+- Tailwind CSS
+- Lightweight Charts (TradingView)
+- Lucide React icons
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Next Steps
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+To connect real market data, replace the simulated `tickPrices()` in `src/lib/store.ts` with a WebSocket feed from your broker or data provider (e.g. Binance, MetaTrader bridge, or Polygon.io).
