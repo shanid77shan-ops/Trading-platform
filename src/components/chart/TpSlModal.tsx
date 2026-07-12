@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Minus, Plus, X } from "lucide-react";
 import type { Position } from "@/lib/types";
 import { cn, formatPrice } from "@/lib/utils";
@@ -37,7 +37,6 @@ interface PricePnlInputsProps {
   position: Position;
   price: number;
   onPriceChange: (price: number) => void;
-  pnlMode: "price" | "pnl";
   calcPnl: (position: Position, targetPrice: number) => number;
 }
 
@@ -45,21 +44,26 @@ function PricePnlInputs({
   position,
   price,
   onPriceChange,
-  pnlMode,
   calcPnl,
 }: PricePnlInputsProps) {
   const step = priceStep(position.currentPrice);
   const pnl = calcPnl(position, price);
   const [priceInput, setPriceInput] = useState(formatPrice(price));
   const [pnlInput, setPnlInput] = useState(pnl.toFixed(2));
+  const editingRef = useRef<"price" | "pnl" | null>(null);
 
   useEffect(() => {
-    setPriceInput(formatPrice(price));
-    setPnlInput(pnl.toFixed(2));
+    if (editingRef.current !== "price") {
+      setPriceInput(formatPrice(price));
+    }
+    if (editingRef.current !== "pnl") {
+      setPnlInput(pnl.toFixed(2));
+    }
   }, [price, pnl]);
 
   function commitPrice(value: string) {
-    const parsed = parseFloat(value.replace(/,/g, ""));
+    editingRef.current = null;
+    const parsed = parseFloat(value.replace(/,/g, "").trim());
     if (!Number.isNaN(parsed) && parsed >= 0) {
       onPriceChange(parsed);
       setPriceInput(formatPrice(parsed));
@@ -69,7 +73,8 @@ function PricePnlInputs({
   }
 
   function commitPnl(value: string) {
-    const parsed = parseFloat(value.replace(/,/g, ""));
+    editingRef.current = null;
+    const parsed = parseFloat(value.replace(/,/g, "").trim());
     if (!Number.isNaN(parsed)) {
       const nextPrice = priceFromPnl(position, parsed);
       onPriceChange(Math.max(0, nextPrice));
@@ -95,12 +100,18 @@ function PricePnlInputs({
             type="text"
             inputMode="decimal"
             value={priceInput}
+            onFocus={() => {
+              editingRef.current = "price";
+            }}
             onChange={(e) => setPriceInput(e.target.value)}
             onBlur={(e) => commitPrice(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") commitPrice(priceInput);
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+                commitPrice(priceInput);
+              }
             }}
-            className="w-full min-w-0 bg-transparent text-center text-sm font-medium text-white outline-none selection:bg-[#26a69a]/40"
+            className="w-full min-w-0 rounded bg-[#1a2332]/60 px-1 py-0.5 text-center text-sm font-medium text-white outline-none ring-0 focus:bg-[#26a69a]/20 focus:ring-1 focus:ring-[#26a69a]/50"
           />
           <button
             type="button"
@@ -113,32 +124,26 @@ function PricePnlInputs({
       </div>
       <div className="rounded-xl border border-[#1a2332] bg-[#0b121c] p-3">
         <p className="text-[10px] text-[#5a6a7e]">PnL (USD)</p>
-        {pnlMode === "pnl" ? (
-          <input
-            type="text"
-            inputMode="decimal"
-            value={pnlInput}
-            onChange={(e) => setPnlInput(e.target.value)}
-            onBlur={(e) => commitPnl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitPnl(pnlInput);
-            }}
-            className={cn(
-              "mt-3 w-full bg-transparent text-center text-sm font-medium outline-none selection:bg-[#26a69a]/40",
-              pnl >= 0 ? "text-[#26a69a]" : "text-[#ef5350]"
-            )}
-          />
-        ) : (
-          <p
-            className={cn(
-              "mt-3 text-center text-sm font-medium",
-              pnl >= 0 ? "text-[#26a69a]" : "text-[#ef5350]"
-            )}
-          >
-            {pnl >= 0 ? "+" : ""}
-            {pnl.toFixed(2)}
-          </p>
-        )}
+        <input
+          type="text"
+          inputMode="decimal"
+          value={pnlInput}
+          onFocus={() => {
+            editingRef.current = "pnl";
+          }}
+          onChange={(e) => setPnlInput(e.target.value)}
+          onBlur={(e) => commitPnl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+              commitPnl(pnlInput);
+            }
+          }}
+          className={cn(
+            "mt-2 w-full rounded bg-[#1a2332]/60 px-2 py-1.5 text-center text-sm font-medium outline-none ring-0 focus:ring-1 focus:ring-[#26a69a]/50",
+            pnl >= 0 ? "text-[#26a69a] focus:bg-[#26a69a]/10" : "text-[#ef5350] focus:bg-[#ef5350]/10"
+          )}
+        />
       </div>
     </div>
   );
@@ -155,7 +160,6 @@ export function TpSlModal({
   const [stopLossEnabled, setStopLossEnabled] = useState(settings.stopLossEnabled);
   const [takeProfitPrice, setTakeProfitPrice] = useState(settings.takeProfitPrice);
   const [stopLossPrice, setStopLossPrice] = useState(settings.stopLossPrice);
-  const [pnlMode, setPnlMode] = useState<"price" | "pnl">("price");
 
   const tpPnl = calcPnl(position, takeProfitPrice);
   const slPnl = calcPnl(position, stopLossPrice);
@@ -230,13 +234,9 @@ export function TpSlModal({
               </span>
               <span className="text-sm font-medium text-white">Take Profit</span>
             </button>
-            <button
-              type="button"
-              className="flex items-center gap-1 text-xs text-[#8a9bb0]"
-              onClick={() => setPnlMode((m) => (m === "price" ? "pnl" : "price"))}
-            >
+            <span className="flex items-center gap-1 text-xs text-[#8a9bb0]">
               PnL <ChevronDown size={12} />
-            </button>
+            </span>
           </div>
 
           {takeProfitEnabled && (
@@ -245,7 +245,6 @@ export function TpSlModal({
                 position={position}
                 price={takeProfitPrice}
                 onPriceChange={setTakeProfitPrice}
-                pnlMode={pnlMode}
                 calcPnl={calcPnl}
               />
               <p className="mt-3 text-xs leading-relaxed text-[#5a6a7e]">
@@ -295,7 +294,6 @@ export function TpSlModal({
                 position={position}
                 price={stopLossPrice}
                 onPriceChange={setStopLossPrice}
-                pnlMode={pnlMode}
                 calcPnl={calcPnl}
               />
               <p className="mt-3 text-xs leading-relaxed text-[#5a6a7e]">
