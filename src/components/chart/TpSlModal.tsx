@@ -26,6 +26,124 @@ function priceStep(price: number) {
   return 0.0001;
 }
 
+function priceFromPnl(position: Position, pnl: number) {
+  const direction = position.side === "buy" ? 1 : -1;
+  const divisor = direction * position.lots * 100;
+  if (divisor === 0) return position.currentPrice;
+  return position.openPrice + pnl / divisor;
+}
+
+interface PricePnlInputsProps {
+  position: Position;
+  price: number;
+  onPriceChange: (price: number) => void;
+  pnlMode: "price" | "pnl";
+  calcPnl: (position: Position, targetPrice: number) => number;
+}
+
+function PricePnlInputs({
+  position,
+  price,
+  onPriceChange,
+  pnlMode,
+  calcPnl,
+}: PricePnlInputsProps) {
+  const step = priceStep(position.currentPrice);
+  const pnl = calcPnl(position, price);
+  const [priceInput, setPriceInput] = useState(formatPrice(price));
+  const [pnlInput, setPnlInput] = useState(pnl.toFixed(2));
+
+  useEffect(() => {
+    setPriceInput(formatPrice(price));
+    setPnlInput(pnl.toFixed(2));
+  }, [price, pnl]);
+
+  function commitPrice(value: string) {
+    const parsed = parseFloat(value.replace(/,/g, ""));
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      onPriceChange(parsed);
+      setPriceInput(formatPrice(parsed));
+    } else {
+      setPriceInput(formatPrice(price));
+    }
+  }
+
+  function commitPnl(value: string) {
+    const parsed = parseFloat(value.replace(/,/g, ""));
+    if (!Number.isNaN(parsed)) {
+      const nextPrice = priceFromPnl(position, parsed);
+      onPriceChange(Math.max(0, nextPrice));
+      setPnlInput(parsed.toFixed(2));
+    } else {
+      setPnlInput(pnl.toFixed(2));
+    }
+  }
+
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-3">
+      <div className="rounded-xl border border-[#1a2332] bg-[#0b121c] p-3">
+        <p className="text-[10px] text-[#5a6a7e]">Price (USD)</p>
+        <div className="mt-2 flex items-center justify-between gap-1">
+          <button
+            type="button"
+            onClick={() => onPriceChange(Math.max(0, Number((price - step).toFixed(4))))}
+            className="shrink-0 text-[#8a9bb0]"
+          >
+            <Minus size={16} />
+          </button>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={priceInput}
+            onChange={(e) => setPriceInput(e.target.value)}
+            onBlur={(e) => commitPrice(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitPrice(priceInput);
+            }}
+            className="w-full min-w-0 bg-transparent text-center text-sm font-medium text-white outline-none selection:bg-[#26a69a]/40"
+          />
+          <button
+            type="button"
+            onClick={() => onPriceChange(Number((price + step).toFixed(4)))}
+            className="shrink-0 text-[#8a9bb0]"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+      </div>
+      <div className="rounded-xl border border-[#1a2332] bg-[#0b121c] p-3">
+        <p className="text-[10px] text-[#5a6a7e]">PnL (USD)</p>
+        {pnlMode === "pnl" ? (
+          <input
+            type="text"
+            inputMode="decimal"
+            value={pnlInput}
+            onChange={(e) => setPnlInput(e.target.value)}
+            onBlur={(e) => commitPnl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitPnl(pnlInput);
+            }}
+            className={cn(
+              "mt-3 w-full bg-transparent text-center text-sm font-medium outline-none selection:bg-[#26a69a]/40",
+              pnl >= 0 ? "text-[#26a69a]" : "text-[#ef5350]"
+            )}
+          />
+        ) : (
+          <p
+            className={cn(
+              "mt-3 text-center text-sm font-medium",
+              pnl >= 0 ? "text-[#26a69a]" : "text-[#ef5350]"
+            )}
+          >
+            {pnl >= 0 ? "+" : ""}
+            {pnl.toFixed(2)}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function TpSlModal({
   position,
   settings,
@@ -39,7 +157,6 @@ export function TpSlModal({
   const [stopLossPrice, setStopLossPrice] = useState(settings.stopLossPrice);
   const [pnlMode, setPnlMode] = useState<"price" | "pnl">("price");
 
-  const step = priceStep(position.currentPrice);
   const tpPnl = calcPnl(position, takeProfitPrice);
   const slPnl = calcPnl(position, stopLossPrice);
 
@@ -49,14 +166,6 @@ export function TpSlModal({
       document.body.style.overflow = "";
     };
   }, []);
-
-  function adjustTp(delta: number) {
-    setTakeProfitPrice((p) => Math.max(0, Number((p + delta * step).toFixed(4))));
-  }
-
-  function adjustSl(delta: number) {
-    setStopLossPrice((p) => Math.max(0, Number((p + delta * step).toFixed(4))));
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60">
@@ -132,42 +241,13 @@ export function TpSlModal({
 
           {takeProfitEnabled && (
             <>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-[#1a2332] bg-[#0b121c] p-3">
-                  <p className="text-[10px] text-[#5a6a7e]">Price (USD)</p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => adjustTp(-1)}
-                      className="text-[#8a9bb0]"
-                    >
-                      <Minus size={16} />
-                    </button>
-                    <span className="text-sm font-medium text-white">
-                      {formatPrice(takeProfitPrice)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => adjustTp(1)}
-                      className="text-[#8a9bb0]"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                </div>
-                <div className="rounded-xl border border-[#1a2332] bg-[#0b121c] p-3">
-                  <p className="text-[10px] text-[#5a6a7e]">PnL (USD)</p>
-                  <p
-                    className={cn(
-                      "mt-3 text-center text-sm font-medium",
-                      tpPnl >= 0 ? "text-[#26a69a]" : "text-[#ef5350]"
-                    )}
-                  >
-                    {tpPnl >= 0 ? "+" : ""}
-                    {tpPnl.toFixed(2)}
-                  </p>
-                </div>
-              </div>
+              <PricePnlInputs
+                position={position}
+                price={takeProfitPrice}
+                onPriceChange={setTakeProfitPrice}
+                pnlMode={pnlMode}
+                calcPnl={calcPnl}
+              />
               <p className="mt-3 text-xs leading-relaxed text-[#5a6a7e]">
                 When the last price reaches{" "}
                 <span className="font-medium text-white">
@@ -211,42 +291,13 @@ export function TpSlModal({
 
           {stopLossEnabled && (
             <>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-[#1a2332] bg-[#0b121c] p-3">
-                  <p className="text-[10px] text-[#5a6a7e]">Price (USD)</p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => adjustSl(-1)}
-                      className="text-[#8a9bb0]"
-                    >
-                      <Minus size={16} />
-                    </button>
-                    <span className="text-sm font-medium text-white">
-                      {formatPrice(stopLossPrice)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => adjustSl(1)}
-                      className="text-[#8a9bb0]"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                </div>
-                <div className="rounded-xl border border-[#1a2332] bg-[#0b121c] p-3">
-                  <p className="text-[10px] text-[#5a6a7e]">PnL (USD)</p>
-                  <p
-                    className={cn(
-                      "mt-3 text-center text-sm font-medium",
-                      slPnl >= 0 ? "text-[#26a69a]" : "text-[#ef5350]"
-                    )}
-                  >
-                    {slPnl >= 0 ? "+" : ""}
-                    {slPnl.toFixed(2)}
-                  </p>
-                </div>
-              </div>
+              <PricePnlInputs
+                position={position}
+                price={stopLossPrice}
+                onPriceChange={setStopLossPrice}
+                pnlMode={pnlMode}
+                calcPnl={calcPnl}
+              />
               <p className="mt-3 text-xs leading-relaxed text-[#5a6a7e]">
                 When the last price reaches{" "}
                 <span className="font-medium text-white">
