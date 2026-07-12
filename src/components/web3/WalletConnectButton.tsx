@@ -1,12 +1,8 @@
 "use client";
 
 import { useAppKit } from "@reown/appkit/react";
-import { useAccount } from "wagmi";
 import { projectId } from "@/config";
-
-function truncateAddress(address: string) {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
+import { useConnectedWallet } from "@/hooks/useConnectedWallet";
 
 const neuroBase =
   "rounded-2xl border border-[#4a5d75]/20 bg-[#3d4f63] text-[#e8edf4] transition-all duration-200";
@@ -17,7 +13,7 @@ const neuroPressed = `${neuroBase} shadow-[inset_5px_5px_12px_rgba(0,0,0,0.45),i
 
 function WalletConnectButtonInner() {
   const { open } = useAppKit();
-  const { address, isConnected } = useAccount();
+  const { address, displayAddress, isConnected } = useConnectedWallet();
 
   return (
     <div
@@ -39,10 +35,10 @@ function WalletConnectButtonInner() {
         className={`w-full px-6 py-3.5 text-sm font-semibold ${isConnected ? neuroPressed : neuroRaised} active:shadow-[inset_5px_5px_12px_rgba(0,0,0,0.45),inset_-5px_-5px_12px_rgba(255,255,255,0.04)]`}
         style={{ background: "linear-gradient(145deg, #4a5d75, #3d4f63)" }}
       >
-        {isConnected && address ? (
+        {isConnected && address && displayAddress ? (
           <span className="flex items-center justify-center gap-2">
             <span className="inline-block h-2 w-2 rounded-full bg-[#6b8cae] shadow-[0_0_6px_#6b8cae]" />
-            {truncateAddress(address)}
+            {displayAddress}
           </span>
         ) : (
           "Connect Wallet"

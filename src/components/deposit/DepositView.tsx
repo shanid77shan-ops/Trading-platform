@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Headphones } from "lucide-react";
 import type { PaymentCategory, PaymentMethod } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useConnectedWallet, truncateAddress } from "@/hooks/useConnectedWallet";
+import { ConnectedWalletBadge } from "@/components/web3/WalletConnectPrompt";
 
 type FilterTab = "all" | PaymentCategory;
 
@@ -27,7 +29,15 @@ function PaymentIcon({ method }: { method: PaymentMethod }) {
   );
 }
 
-function PaymentRow({ method }: { method: PaymentMethod }) {
+function PaymentRow({
+  method,
+  connectedAddress,
+}: {
+  method: PaymentMethod;
+  connectedAddress?: string;
+}) {
+  const showAddress = method.category === "crypto" && connectedAddress;
+
   return (
     <Link
       href={`/profile/deposit/${method.id}`}
@@ -44,6 +54,11 @@ function PaymentRow({ method }: { method: PaymentMethod }) {
             {method.processingTime}
           </span>
         </div>
+        {showAddress && (
+          <p className="mt-1 truncate text-[11px] text-[#6b8cae]">
+            {truncateAddress(connectedAddress, 8, 6)}
+          </p>
+        )}
       </div>
     </Link>
   );
@@ -53,6 +68,7 @@ export function DepositView() {
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
+  const { address, isConnected } = useConnectedWallet();
 
   useEffect(() => {
     fetch("/api/deposit")
@@ -83,6 +99,11 @@ export function DepositView() {
           </button>
         </div>
         <p className="mt-4 text-sm text-[#8a9bb0]">Select payment method</p>
+        {isConnected && address && (
+          <div className="mt-3">
+            <ConnectedWalletBadge />
+          </div>
+        )}
       </header>
 
       <div className="flex items-center border-b border-[#1a2332]">
@@ -115,7 +136,11 @@ export function DepositView() {
       ) : (
         <div className="flex-1">
           {filtered.map((method) => (
-            <PaymentRow key={method.id} method={method} />
+            <PaymentRow
+              key={method.id}
+              method={method}
+              connectedAddress={address}
+            />
           ))}
         </div>
       )}

@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Copy, Headphones, Check } from "lucide-react";
 import type { PaymentMethod } from "@/lib/types";
+import {
+  resolveCryptoDepositAddress,
+  useConnectedWallet,
+} from "@/hooks/useConnectedWallet";
+import { WalletConnectPrompt } from "@/components/web3/WalletConnectPrompt";
 
 function PaymentIcon({ method }: { method: PaymentMethod }) {
   return (
@@ -20,6 +25,13 @@ export function DepositDetailView({ methodId }: { methodId: string }) {
   const [method, setMethod] = useState<PaymentMethod | null>(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { address, isConnected } = useConnectedWallet();
+
+  const depositAddress = method
+    ? resolveCryptoDepositAddress(method.walletAddress, address)
+    : undefined;
+
+  const isCrypto = method?.category === "crypto";
 
   useEffect(() => {
     fetch("/api/deposit")
@@ -32,8 +44,8 @@ export function DepositDetailView({ methodId }: { methodId: string }) {
   }, [methodId]);
 
   function copyAddress() {
-    if (!method?.walletAddress) return;
-    navigator.clipboard.writeText(method.walletAddress);
+    if (!depositAddress) return;
+    navigator.clipboard.writeText(depositAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -89,12 +101,20 @@ export function DepositDetailView({ methodId }: { methodId: string }) {
           </div>
         </div>
 
-        {method.walletAddress ? (
+        {isCrypto && !isConnected ? (
+          <WalletConnectPrompt />
+        ) : method.walletAddress || (isCrypto && depositAddress) ? (
           <div className="mt-8">
             <p className="text-sm text-[#8a9bb0]">
-              Send only {method.name.split("-")[0] || "crypto"} to this address on the{" "}
-              {method.network} network
+              Send only {method.name.split("-")[0] || "crypto"} to this address
+              {method.network ? ` on the ${method.network} network` : ""}
             </p>
+
+            {isConnected && address && (
+              <p className="mt-2 text-xs text-[#26a69a]">
+                Using your connected wallet address across all cryptocurrencies
+              </p>
+            )}
 
             <div className="mt-4 flex justify-center">
               <div className="rounded-xl bg-white p-4">
@@ -103,7 +123,8 @@ export function DepositDetailView({ methodId }: { methodId: string }) {
                     <rect x="0" y="0" width="100" height="100" fill="white" />
                     {Array.from({ length: 10 }).map((_, row) =>
                       Array.from({ length: 10 }).map((_, col) => {
-                        const hash = (row * 10 + col + method.id.length) % 3;
+                        const seed = (depositAddress ?? method.id).length;
+                        const hash = (row * 10 + col + seed) % 3;
                         if (hash === 0) return null;
                         return (
                           <rect
@@ -126,7 +147,7 @@ export function DepositDetailView({ methodId }: { methodId: string }) {
               <p className="text-xs text-[#5a6a7e]">Deposit Address</p>
               <div className="mt-2 flex items-center gap-2 rounded-xl border border-[#1a2332] bg-[#111a27] p-3">
                 <p className="flex-1 break-all text-sm text-white">
-                  {method.walletAddress}
+                  {depositAddress}
                 </p>
                 <button
                   onClick={copyAddress}
@@ -149,6 +170,9 @@ export function DepositDetailView({ methodId }: { methodId: string }) {
                 <li>• Only send {method.name} to this address</li>
                 <li>• Deposits are credited within {method.processingTime}</li>
                 <li>• Sending other assets may result in permanent loss</li>
+                {isConnected && (
+                  <li>• This is your connected wallet address used platform-wide</li>
+                )}
               </ul>
             </div>
           </div>

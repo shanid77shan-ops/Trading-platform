@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { Account, UserProfile } from "@/lib/types";
 import { WalletConnectButton } from "@/components/web3/WalletConnectButton";
+import { useConnectedWallet } from "@/hooks/useConnectedWallet";
 
 interface GridItem {
   label: string;
@@ -79,7 +80,9 @@ export function ProfileView() {
   const [account, setAccount] = useState<Account | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [copied, setCopied] = useState(false);
+  const [walletCopied, setWalletCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { address, displayAddress, isConnected } = useConnectedWallet();
 
   useEffect(() => {
     fetch("/api/profile")
@@ -96,6 +99,13 @@ export function ProfileView() {
     navigator.clipboard.writeText(profile.uid);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function copyWallet() {
+    if (!address) return;
+    navigator.clipboard.writeText(address);
+    setWalletCopied(true);
+    setTimeout(() => setWalletCopied(false), 2000);
   }
 
   if (loading || !account || !profile) {
@@ -157,6 +167,22 @@ export function ProfileView() {
               <Copy size={12} />
             )}
           </button>
+          {isConnected && address && displayAddress && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                copyWallet();
+              }}
+              className="mt-1 flex items-center gap-1.5 text-sm text-[#6b8cae]"
+            >
+              Wallet: {displayAddress}
+              {walletCopied ? (
+                <Check size={12} className="text-[#26a69a]" />
+              ) : (
+                <Copy size={12} />
+              )}
+            </button>
+          )}
           {profile.verified && (
             <span className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-[#26a69a]/40 bg-[#26a69a]/10 px-2 py-0.5 text-[11px] text-[#26a69a]">
               <BadgeCheck size={10} />
