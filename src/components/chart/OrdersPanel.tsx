@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowUpDown, ChevronDown, Zap } from "lucide-react";
 import type { Position, Symbol } from "@/lib/types";
 import { cn, formatPrice } from "@/lib/utils";
@@ -23,11 +23,19 @@ function calcPnl(
   return (targetPrice - position.openPrice) * direction * position.lots * 100;
 }
 
+function getRemainingSeconds(expiresAt?: string) {
+  if (!expiresAt) return null;
+  return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000));
+}
+
 interface OrdersPanelProps {
   symbol: Symbol;
   positions: Position[];
   onClosePosition: (positionId: string) => Promise<void>;
   closingId?: string | null;
+  onRefresh?: () => Promise<void>;
+  subTab?: OrderSubTab;
+  onSubTabChange?: (tab: OrderSubTab) => void;
 }
 
 export function OrdersPanel({
@@ -35,15 +43,42 @@ export function OrdersPanel({
   positions,
   onClosePosition,
   closingId,
+  onRefresh,
+  subTab: controlledSubTab,
+  onSubTabChange,
 }: OrdersPanelProps) {
-  const [subTab, setSubTab] = useState<OrderSubTab>("positions");
+  const [internalSubTab, setInternalSubTab] = useState<OrderSubTab>("positions");
+  const subTab = controlledSubTab ?? internalSubTab;
+  const setSubTab = onSubTabChange ?? setInternalSubTab;
   const [tpSlPosition, setTpSlPosition] = useState<Position | null>(null);
   const [tpSlMap, setTpSlMap] = useState<Record<string, TpSlSettings>>({});
+  const [, setTick] = useState(0);
 
   const symbolPositions = useMemo(
     () => positions.filter((p) => p.symbolId === symbol.id || p.ticker === symbol.ticker),
     [positions, symbol.id, symbol.ticker]
   );
+
+  const entrustPositions = useMemo(
+    () => symbolPositions.filter((p) => p.expiresAt),
+    [symbolPositions]
+  );
+
+  useEffect(() => {
+    if (entrustPositions.length === 0) return;
+
+    const timer = setInterval(() => {
+      setTick((t) => t + 1);
+      const hasExpired = entrustPositions.some(
+        (p) => p.expiresAt && new Date(p.expiresAt).getTime() <= Date.now()
+      );
+      if (hasExpired) {
+        onRefresh?.();
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [entrustPositions, onRefresh]);
 
   function getTpSlSettings(position: Position): TpSlSettings {
     return (
@@ -76,15 +111,73 @@ export function OrdersPanel({
                 : "border-transparent text-[#8a9bb0]"
             )}
           >
-            {tab === "positions" ? "Positions" : "Pending Orders"}
+            {tab === "positions" ? "Positions" : "Entrust Orders"}
           </button>
         ))}
       </div>
 
       {subTab === "pending" ? (
-        <p className="px-4 py-12 text-center text-sm text-[#5a6a7e]">
-          No pending orders
-        </p>
+        entrustPositions.length === 0 ? (
+          <p className="px-4 py-12 text-center text-sm text-[#5a6a7e]">
+            No active entrust orders
+          </p>
+        ) : (
+          entrustPositions.map((pos) => {
+            const remaining = getRemainingSeconds(pos.expiresAt);
+            const isProfit = pos.pnl >= 0;
+
+            return (
+              <div key={pos.id} className="border-b border-[#1a2332]">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white",
+                        pos.side === "buy" ? "bg-[#26a69a]" : "bg-[#ef5350]"
+                      )}
+                    >
+                      {pos.side === "buy" ? "B" : "S"}
+                    </span>
+                    <div>
+                      <span className="font-semibold text-white">{pos.ticker}</span>
+                      <p className="text-[10px] text-[#26a69a]">Entrust Now</p>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "text-sm font-medium",
+                      isProfit ? "text-[#26a69a]" : "text-[#ef5350]"
+                    )}
+                  >
+                    {isProfit ? "+" : ""}
+                    {pos.pnl.toFixed(2)} USD
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 border-t border-[#1a2332] px-4 py-3">
+                  <div>
+                    <p className="text-[10px] text-[#5a6a7e]">Amount</p>
+                    <p className="mt-0.5 text-sm text-white">
+                      ${pos.amount?.toFixed(2) ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-[#5a6a7e]">Entry Price</p>
+                    <p className="mt-0.5 text-sm text-white">
+                      {formatPrice(pos.openPrice)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-[#5a6a7e]">Closes In</p>
+                    <p className="mt-0.5 text-sm font-medium text-[#26a69a]">
+                      {remaining != null && remaining > 0 ? `${remaining}s` : "Closing..."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )
       ) : symbolPositions.length === 0 ? (
         <p className="px-4 py-12 text-center text-sm text-[#5a6a7e]">
           No open positions for {symbol.ticker}
@@ -93,6 +186,8 @@ export function OrdersPanel({
         symbolPositions.map((pos) => {
           const isProfit = pos.pnl >= 0;
           const settings = getTpSlSettings(pos);
+          const remaining = getRemainingSeconds(pos.expiresAt);
+          const isEntrust = Boolean(pos.expiresAt);
 
           return (
             <div key={pos.id} className="border-b border-[#1a2332]">
@@ -107,6 +202,11 @@ export function OrdersPanel({
                     {pos.side === "buy" ? "B" : "S"}
                   </span>
                   <span className="font-semibold text-white">{pos.ticker}</span>
+                  {isEntrust && (
+                    <span className="ml-2 rounded bg-[#26a69a]/20 px-1.5 py-0.5 text-[10px] text-[#26a69a]">
+                      Entrust
+                    </span>
+                  )}
                 </div>
                 <span
                   className={cn(
@@ -135,9 +235,20 @@ export function OrdersPanel({
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-[#5a6a7e]">Current Price</p>
-                  <p className="mt-0.5 text-sm text-white">
-                    {formatPrice(pos.currentPrice)}
+                  <p className="text-[10px] text-[#5a6a7e]">
+                    {isEntrust ? "Closes In" : "Current Price"}
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 text-sm",
+                      isEntrust ? "font-medium text-[#26a69a]" : "text-white"
+                    )}
+                  >
+                    {isEntrust
+                      ? remaining != null && remaining > 0
+                        ? `${remaining}s`
+                        : "Closing..."
+                      : formatPrice(pos.currentPrice)}
                   </p>
                 </div>
               </div>
@@ -154,32 +265,36 @@ export function OrdersPanel({
               )}
 
               <div className="flex items-center gap-2 overflow-x-auto border-t border-[#1a2332] px-4 py-3">
-                <button
-                  type="button"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#1a2332] bg-[#111a27] text-[#8a9bb0]"
-                  aria-label="Reverse"
-                >
-                  <ArrowUpDown size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTpSlPosition(pos)}
-                  className="shrink-0 rounded-full border border-[#1a2332] bg-[#111a27] px-4 py-2 text-xs text-white"
-                >
-                  TP/SL
-                </button>
-                <button
-                  type="button"
-                  className="shrink-0 rounded-full border border-[#1a2332] bg-[#111a27] px-4 py-2 text-xs text-white"
-                >
-                  Close By
-                </button>
-                <button
-                  type="button"
-                  className="shrink-0 rounded-full border border-[#1a2332] bg-[#111a27] px-4 py-2 text-xs text-white"
-                >
-                  Partially Close
-                </button>
+                {!isEntrust && (
+                  <>
+                    <button
+                      type="button"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#1a2332] bg-[#111a27] text-[#8a9bb0]"
+                      aria-label="Reverse"
+                    >
+                      <ArrowUpDown size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTpSlPosition(pos)}
+                      className="shrink-0 rounded-full border border-[#1a2332] bg-[#111a27] px-4 py-2 text-xs text-white"
+                    >
+                      TP/SL
+                    </button>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full border border-[#1a2332] bg-[#111a27] px-4 py-2 text-xs text-white"
+                    >
+                      Close By
+                    </button>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full border border-[#1a2332] bg-[#111a27] px-4 py-2 text-xs text-white"
+                    >
+                      Partially Close
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => onClosePosition(pos.id)}

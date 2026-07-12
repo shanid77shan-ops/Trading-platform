@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -11,23 +11,22 @@ import {
   Settings,
   Share2,
 } from "lucide-react";
-import type { Account, Position, Symbol } from "@/lib/types";
+import type { Account, Symbol } from "@/lib/types";
 import { cn, formatChange, formatPrice } from "@/lib/utils";
 import { useMarketData } from "@/hooks/useMarketData";
 import { OrdersPanel } from "./OrdersPanel";
 import { TradingChart } from "./TradingChart";
 
 const timeframes = ["Tick", "1m", "15m", "1h", "1D", "1W", "More"];
-const tabs = ["Chart", "Analysis", "Orders", "Info"];
+const tabs = ["Chart", "Orders"];
 const entrustDurations = [60, 120, 190] as const;
 
 interface ChartViewProps {
   symbol: Symbol;
   account: Account;
-  position?: Position;
 }
 
-export function ChartView({ symbol, account, position }: ChartViewProps) {
+export function ChartView({ symbol, account }: ChartViewProps) {
   const { data, refresh } = useMarketData();
   const [activeTab, setActiveTab] = useState("Chart");
   const [activeTf, setActiveTf] = useState("1m");
@@ -38,28 +37,12 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
   const [entrustDuration, setEntrustDuration] = useState<(typeof entrustDurations)[number]>(60);
   const [entrustSide, setEntrustSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("10");
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const [ordersSubTab, setOrdersSubTab] = useState<"positions" | "pending">("positions");
 
   const positions = data?.positions ?? [];
   const isUp = symbol.changePercent >= 0;
   const spread = Math.round((symbol.ask - symbol.bid) * (symbol.price > 100 ? 100 : 10000));
   const showTradePanel = activeTab === "Chart";
-
-  useEffect(() => {
-    if (countdown === null || countdown <= 0) return;
-
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          refresh();
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [countdown, refresh]);
 
   async function toggleWatchlist() {
     const res = await fetch("/api/watchlist", {
@@ -102,10 +85,9 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
       if (!res.ok) {
         setTradeMsg(json.error ?? "Entrust failed");
       } else {
-        setTradeMsg(
-          `${entrustSide.toUpperCase()} $${value.toFixed(2)} · closes in ${entrustDuration}s`
-        );
-        setCountdown(entrustDuration);
+        setTradeMsg("");
+        setOrdersSubTab("pending");
+        setActiveTab("Orders");
         await refresh();
       }
     } finally {
@@ -224,15 +206,7 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
             </div>
           </div>
 
-          <TradingChart
-            price={symbol.price}
-            positionPrice={position?.openPrice}
-            positionLabel={
-              position
-                ? `${position.side.toUpperCase()} ${position.lots} Lots ${position.pnl >= 0 ? "+" : ""}${position.pnl.toFixed(2)}`
-                : undefined
-            }
-          />
+          <TradingChart price={symbol.price} />
 
           <div className="border-b border-[#1a2332] px-3 py-2">
             <div className="flex items-center justify-between text-[10px] text-[#5a6a7e]">
@@ -259,25 +233,10 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
           positions={positions}
           onClosePosition={handleClosePosition}
           closingId={closingId}
+          onRefresh={refresh}
+          subTab={ordersSubTab}
+          onSubTabChange={setOrdersSubTab}
         />
-      )}
-
-      {activeTab === "Analysis" && (
-        <div className="flex flex-1 items-center justify-center px-4 py-16 text-sm text-[#5a6a7e]">
-          Technical analysis coming soon
-        </div>
-      )}
-
-      {activeTab === "Info" && (
-        <div className="flex-1 px-4 py-4">
-          <div className="rounded-xl border border-[#1a2332] bg-[#111a27] p-4">
-            <h3 className="font-semibold text-white">{symbol.name}</h3>
-            <p className="mt-2 text-sm text-[#8a9bb0]">Category: {symbol.category}</p>
-            <p className="mt-1 text-sm text-[#8a9bb0]">
-              Spread: {formatPrice(symbol.ask - symbol.bid)}
-            </p>
-          </div>
-        </div>
       )}
 
       {showTradePanel && (
@@ -355,24 +314,8 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
             </span>
             <span className="text-[#26a69a]">{account.marginLevel.toFixed(2)}%</span>
           </div>
-          {countdown !== null && countdown > 0 && (
-            <p className="mt-2 text-center text-xs text-[#26a69a]">
-              Trade closes in {countdown}s
-            </p>
-          )}
           {tradeMsg && (
-            <p
-              className={cn(
-                "mt-2 text-center text-xs",
-                tradeMsg.includes("failed") ||
-                  tradeMsg.includes("Insufficient") ||
-                  tradeMsg.includes("valid")
-                  ? "text-[#ef5350]"
-                  : "text-[#26a69a]"
-              )}
-            >
-              {tradeMsg}
-            </p>
+            <p className="mt-2 text-center text-xs text-[#ef5350]">{tradeMsg}</p>
           )}
         </div>
       )}

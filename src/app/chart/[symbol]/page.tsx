@@ -23,11 +23,11 @@ export default function ChartPage({
   params: Promise<{ symbol: string }>;
 }) {
   const { symbol: symbolId } = use(params);
-  const { symbol, position, account, loading } = useSymbol(symbolId);
+  const { symbol, account, loading } = useSymbol(symbolId);
 
   if (loading || !symbol || !account) {
     return <ChartSkeleton ticker={symbolId} />;
   }
 
-  return <ChartView symbol={symbol} account={account} position={position} />;
+  return <ChartView symbol={symbol} account={account} />;
 }
