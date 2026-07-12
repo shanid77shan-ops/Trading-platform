@@ -21,6 +21,7 @@ import { TradingChart } from "./TradingChart";
 
 const timeframes = ["Tick", "1m", "15m", "1h", "1D", "1W", "More"];
 const tabs = ["Chart", "Analysis", "Orders", "Info"];
+const entrustDurations = [60, 120, 190] as const;
 
 interface ChartViewProps {
   symbol: Symbol;
@@ -37,6 +38,7 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
   const [closingId, setClosingId] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(symbol.inWatchlist);
   const [tradeMsg, setTradeMsg] = useState("");
+  const [entrustDuration, setEntrustDuration] = useState<(typeof entrustDurations)[number]>(60);
 
   const positions = data?.positions ?? [];
   const isUp = symbol.changePercent >= 0;
@@ -246,9 +248,26 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
       {showTradePanel && (
         <div className="mt-auto border-t border-[#1a2332] bg-[#0b121c] p-4">
           <div className="mb-3 flex items-center justify-between">
-            <button className="flex items-center gap-1 text-sm text-[#8a9bb0]">
-              One-Tap <ChevronDown size={14} />
-            </button>
+            <div>
+              <p className="text-sm text-[#8a9bb0]">Entrust Now</p>
+              <div className="mt-1.5 flex gap-1.5">
+                {entrustDurations.map((seconds) => (
+                  <button
+                    key={seconds}
+                    type="button"
+                    onClick={() => setEntrustDuration(seconds)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 text-xs font-medium",
+                      entrustDuration === seconds
+                        ? "bg-[#26a69a] text-white"
+                        : "bg-[#1a2a3a] text-[#8a9bb0] hover:text-white"
+                    )}
+                  >
+                    {seconds}s
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setLots(Math.max(0.01, lots - 0.01))}
