@@ -13,6 +13,8 @@ function mapPosition(row: {
   open_price: number;
   current_price: number;
   pnl: number;
+  amount?: number | null;
+  expires_at?: string | null;
 }): Position {
   return {
     id: row.id,
@@ -23,6 +25,8 @@ function mapPosition(row: {
     openPrice: Number(row.open_price),
     currentPrice: Number(row.current_price),
     pnl: Number(row.pnl),
+    amount: row.amount != null ? Number(row.amount) : undefined,
+    expiresAt: row.expires_at ?? undefined,
   };
 }
 
@@ -191,7 +195,24 @@ export function computeLiveSnapshot(
   };
 }
 
+export async function closeExpiredPositions(userId: string) {
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const { data: expired } = await supabase
+    .from("positions")
+    .select("id")
+    .eq("user_id", userId)
+    .not("expires_at", "is", null)
+    .lte("expires_at", now);
+
+  for (const position of expired ?? []) {
+    await closeUserPosition(userId, position.id);
+  }
+}
+
 export async function getLiveMarketTick(userId: string, symbols: Symbol[]) {
+  await closeExpiredPositions(userId);
+
   const [watchlist, positions, accountRow] = await Promise.all([
     getUserWatchlistIds(userId),
     getUserPositions(userId),
@@ -211,6 +232,8 @@ export async function getLiveMarketTick(userId: string, symbols: Symbol[]) {
 export async function getFullMarketSnapshot() {
   const { user, account } = await getAuthenticatedUserData();
   if (!user) return null;
+
+  await closeExpiredPositions(user.id);
 
   const symbols = getSymbols();
   const [watchlist, positions, trades] = await Promise.all([
@@ -316,6 +339,80 @@ export async function executeUserTrade(
   };
 }
 
+export async function executeEntrustTrade(
+  userId: string,
+  symbolId: string,
+  side: "buy" | "sell",
+  amount: number,
+  durationSeconds: number
+) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { success: false, error: "Invalid amount" };
+  }
+
+  if (![60, 120, 190].includes(durationSeconds)) {
+    return { success: false, error: "Invalid duration" };
+  }
+
+  const symbol = getSymbol(symbolId);
+  if (!symbol) return { success: false, error: "Symbol not found" };
+
+  const supabase = await createClient();
+  const price = side === "buy" ? symbol.ask : symbol.bid;
+  const lots = amount / (price * 0.01);
+  const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
+
+  const { data: account } = await supabase
+    .from("trading_accounts")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (!account || Number(account.free_margin) < amount) {
+    return { success: false, error: "Insufficient margin" };
+  }
+
+  const { data: tradeRow } = await supabase
+    .from("trade_history")
+    .insert({
+      user_id: userId,
+      symbol_id: symbol.id,
+      ticker: symbol.ticker,
+      side,
+      lots,
+      price,
+    })
+    .select("*")
+    .single();
+
+  const { data: positionRow } = await supabase
+    .from("positions")
+    .insert({
+      user_id: userId,
+      symbol_id: symbol.id,
+      ticker: symbol.ticker,
+      side,
+      lots,
+      open_price: price,
+      current_price: price,
+      pnl: 0,
+      amount,
+      expires_at: expiresAt,
+    })
+    .select("*")
+    .single();
+
+  const positions = await getUserPositions(userId);
+  await recalcUserAccount(userId, positions);
+
+  return {
+    success: true,
+    trade: tradeRow ? mapTrade(tradeRow) : undefined,
+    position: positionRow ? mapPosition(positionRow) : undefined,
+    expiresAt,
+  };
+}
+
 export async function closeUserPosition(userId: string, positionId: string) {
   const supabase = await createClient();
   const { data: position } = await supabase
@@ -332,6 +429,15 @@ export async function closeUserPosition(userId: string, positionId: string) {
 
   const closeSide = position.side === "buy" ? "sell" : "buy";
   const price = closeSide === "buy" ? symbol.ask : symbol.bid;
+  const direction = position.side === "buy" ? 1 : -1;
+  const pnl = Number(
+    (
+      (price - Number(position.open_price)) *
+      direction *
+      Number(position.lots) *
+      100
+    ).toFixed(2)
+  );
 
   await supabase.from("trade_history").insert({
     user_id: userId,
@@ -342,7 +448,6 @@ export async function closeUserPosition(userId: string, positionId: string) {
     price,
   });
 
-  const pnl = Number(position.pnl);
   const { data: account } = await supabase
     .from("trading_accounts")
     .select("balance")

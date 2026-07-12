@@ -121,8 +121,12 @@ export function OrdersPanel({
 
               <div className="grid grid-cols-3 gap-2 border-t border-[#1a2332] px-4 py-3">
                 <div>
-                  <p className="text-[10px] text-[#5a6a7e]">Volume (Lots)</p>
-                  <p className="mt-0.5 text-sm text-white">{pos.lots}</p>
+                  <p className="text-[10px] text-[#5a6a7e]">
+                    {pos.amount != null ? "Amount" : "Volume (Lots)"}
+                  </p>
+                  <p className="mt-0.5 text-sm text-white">
+                    {pos.amount != null ? `$${pos.amount.toFixed(2)}` : pos.lots}
+                  </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-[#5a6a7e]">Entry Price</p>

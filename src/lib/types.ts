@@ -46,6 +46,8 @@ export interface Position {
   openPrice: number;
   currentPrice: number;
   pnl: number;
+  amount?: number;
+  expiresAt?: string;
 }
 
 export interface Trade {

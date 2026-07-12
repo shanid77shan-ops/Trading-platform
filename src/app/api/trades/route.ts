@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthenticatedUserData } from "@/lib/supabase/user-data";
 import {
   closeUserPosition,
+  executeEntrustTrade,
   executeUserTrade,
   getUserPositions,
   getUserTrades,
@@ -28,10 +29,28 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { symbolId, side, lots, action, positionId } = body;
+  const { symbolId, side, lots, amount, duration, action, positionId } = body;
 
   if (action === "close" && positionId) {
     const result = await closeUserPosition(user.id, positionId);
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    return NextResponse.json(result);
+  }
+
+  if (action === "entrust") {
+    if (!symbolId || !side || !amount || !duration) {
+      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    }
+
+    const result = await executeEntrustTrade(
+      user.id,
+      symbolId,
+      side,
+      Number(amount),
+      Number(duration)
+    );
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }

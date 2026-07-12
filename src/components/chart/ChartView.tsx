@@ -1,15 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   Bell,
   ChevronDown,
   Heart,
-  Minus,
   Pencil,
-  Plus,
   Settings,
   Share2,
 } from "lucide-react";
@@ -33,17 +31,35 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
   const { data, refresh } = useMarketData();
   const [activeTab, setActiveTab] = useState("Chart");
   const [activeTf, setActiveTf] = useState("1m");
-  const [lots, setLots] = useState(0.1);
   const [trading, setTrading] = useState(false);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(symbol.inWatchlist);
   const [tradeMsg, setTradeMsg] = useState("");
   const [entrustDuration, setEntrustDuration] = useState<(typeof entrustDurations)[number]>(60);
+  const [entrustSide, setEntrustSide] = useState<"buy" | "sell">("buy");
+  const [amount, setAmount] = useState("10");
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const positions = data?.positions ?? [];
   const isUp = symbol.changePercent >= 0;
   const spread = Math.round((symbol.ask - symbol.bid) * (symbol.price > 100 ? 100 : 10000));
   const showTradePanel = activeTab === "Chart";
+
+  useEffect(() => {
+    if (countdown === null || countdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          refresh();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [countdown, refresh]);
 
   async function toggleWatchlist() {
     const res = await fetch("/api/watchlist", {
@@ -57,20 +73,39 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
     }
   }
 
-  async function handleTrade(side: "buy" | "sell") {
+  async function handleEntrust() {
+    const value = parseFloat(amount);
+    if (!Number.isFinite(value) || value <= 0) {
+      setTradeMsg("Enter a valid amount");
+      return;
+    }
+    if (value > account.freeMargin) {
+      setTradeMsg("Insufficient margin");
+      return;
+    }
+
     setTrading(true);
     setTradeMsg("");
     try {
       const res = await fetch("/api/trades", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbolId: symbol.id, side, lots }),
+        body: JSON.stringify({
+          action: "entrust",
+          symbolId: symbol.id,
+          side: entrustSide,
+          amount: value,
+          duration: entrustDuration,
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
-        setTradeMsg(json.error ?? "Trade failed");
+        setTradeMsg(json.error ?? "Entrust failed");
       } else {
-        setTradeMsg(`${side.toUpperCase()} ${lots} lots executed`);
+        setTradeMsg(
+          `${entrustSide.toUpperCase()} $${value.toFixed(2)} · closes in ${entrustDuration}s`
+        );
+        setCountdown(entrustDuration);
         await refresh();
       }
     } finally {
@@ -247,72 +282,72 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
 
       {showTradePanel && (
         <div className="mt-auto border-t border-[#1a2332] bg-[#0b121c] p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-sm text-[#8a9bb0]">Entrust Now</p>
-              <div className="mt-1.5 flex gap-1.5">
-                {entrustDurations.map((seconds) => (
-                  <button
-                    key={seconds}
-                    type="button"
-                    onClick={() => setEntrustDuration(seconds)}
-                    className={cn(
-                      "rounded-lg px-2.5 py-1 text-xs font-medium",
-                      entrustDuration === seconds
-                        ? "bg-[#26a69a] text-white"
-                        : "bg-[#1a2a3a] text-[#8a9bb0] hover:text-white"
-                    )}
-                  >
-                    {seconds}s
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
+          <p className="mb-2 text-sm text-[#8a9bb0]">Entrust Now</p>
+
+          <div className="mb-3 flex gap-1.5">
+            {entrustDurations.map((seconds) => (
               <button
-                onClick={() => setLots(Math.max(0.01, lots - 0.01))}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1a2a3a] text-white"
+                key={seconds}
+                type="button"
+                onClick={() => setEntrustDuration(seconds)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium",
+                  entrustDuration === seconds
+                    ? "bg-[#26a69a] text-white"
+                    : "bg-[#1a2a3a] text-[#8a9bb0] hover:text-white"
+                )}
               >
-                <Minus size={16} />
+                {seconds}s
               </button>
-              <div className="text-center">
-                <p className="text-lg font-semibold text-white">{lots.toFixed(2)}</p>
-                <p className="text-[10px] text-[#5a6a7e]">Lots</p>
-              </div>
-              <button
-                onClick={() => setLots(lots + 0.01)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1a2a3a] text-white"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
+            ))}
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleTrade("sell")}
-              disabled={trading}
-              className="flex flex-1 flex-col items-center rounded-xl bg-[#ef5350] py-3 disabled:opacity-60"
-            >
-              <span className="text-xs text-white/80">Sell</span>
-              <span className="text-lg font-semibold text-white">
-                {formatPrice(symbol.bid)}
-              </span>
-            </button>
-            <div className="rounded-lg bg-[#1a2a3a] px-2 py-1 text-center">
-              <span className="text-xs text-[#8a9bb0]">{spread}</span>
-            </div>
-            <button
-              onClick={() => handleTrade("buy")}
-              disabled={trading}
-              className="flex flex-1 flex-col items-center rounded-xl bg-[#26a69a] py-3 disabled:opacity-60"
-            >
-              <span className="text-xs text-white/80">Buy</span>
-              <span className="text-lg font-semibold text-white">
-                {formatPrice(symbol.ask)}
-              </span>
-            </button>
+          <div className="mb-3 flex gap-2">
+            {(["buy", "sell"] as const).map((side) => (
+              <button
+                key={side}
+                type="button"
+                onClick={() => setEntrustSide(side)}
+                className={cn(
+                  "flex-1 rounded-xl py-2.5 text-sm font-semibold capitalize",
+                  entrustSide === side
+                    ? side === "buy"
+                      ? "bg-[#26a69a] text-white"
+                      : "bg-[#ef5350] text-white"
+                    : "bg-[#1a2a3a] text-[#8a9bb0]"
+                )}
+              >
+                {side}
+              </button>
+            ))}
           </div>
+
+          <div className="mb-3">
+            <label className="mb-1.5 block text-xs text-[#5a6a7e]">Amount (USD)</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full rounded-xl border border-[#1a2332] bg-[#111a27] px-3 py-2.5 text-white outline-none focus:border-[#26a69a]"
+              placeholder="Enter amount"
+            />
+            <p className="mt-1.5 text-[10px] text-[#5a6a7e]">
+              {entrustSide === "buy" ? "Buy" : "Sell"} @ {formatPrice(entrustSide === "buy" ? symbol.ask : symbol.bid)}
+              {" · "}
+              Spread {spread}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleEntrust}
+            disabled={trading}
+            className="w-full rounded-xl bg-[#26a69a] py-3 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {trading ? "Processing..." : "Entrust Now"}
+          </button>
 
           <div className="mt-3 flex items-center justify-between text-xs text-[#8a9bb0]">
             <span>
@@ -320,11 +355,18 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
             </span>
             <span className="text-[#26a69a]">{account.marginLevel.toFixed(2)}%</span>
           </div>
+          {countdown !== null && countdown > 0 && (
+            <p className="mt-2 text-center text-xs text-[#26a69a]">
+              Trade closes in {countdown}s
+            </p>
+          )}
           {tradeMsg && (
             <p
               className={cn(
                 "mt-2 text-center text-xs",
-                tradeMsg.includes("failed") || tradeMsg.includes("Insufficient")
+                tradeMsg.includes("failed") ||
+                  tradeMsg.includes("Insufficient") ||
+                  tradeMsg.includes("valid")
                   ? "text-[#ef5350]"
                   : "text-[#26a69a]"
               )}
