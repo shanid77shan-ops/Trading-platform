@@ -124,11 +124,43 @@ export async function getAuthenticatedUserData() {
     return { user: null, profile: null, account: null };
   }
 
-  const { profile, account } = await ensureUserRecords(supabase, user);
+  const [{ data: profile }, { data: account }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    supabase.from("trading_accounts").select("*").eq("user_id", user.id).maybeSingle(),
+  ]);
 
+  if (profile && account) {
+    return {
+      user,
+      profile: profile as DbProfile,
+      account: account as DbTradingAccount,
+    };
+  }
+
+  const ensured = await ensureUserRecords(supabase, user);
   return {
     user,
-    profile,
-    account,
+    profile: ensured.profile,
+    account: ensured.account,
   };
+}
+
+export async function getAuthUser() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (error || !user) return null;
+  return user;
+}
+
+export async function getUserAccountRow(userId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("trading_accounts")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data as DbTradingAccount | null;
 }

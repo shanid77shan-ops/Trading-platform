@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getSymbol, getSymbols } from "@/lib/store";
 import type { Account, Position, Symbol, Trade } from "@/lib/types";
-import { getAuthenticatedUserData, mapAccount } from "./user-data";
+import { getAuthenticatedUserData, getAuthUser, getUserAccountRow, mapAccount } from "./user-data";
+import type { DbTradingAccount } from "./user-data";
 
 function mapPosition(row: {
   id: string;
@@ -137,37 +138,103 @@ async function recalcUserAccount(userId: string, positions: Position[]) {
   });
 }
 
-export async function updateUserPositionsPrices(userId: string, symbols: Symbol[]) {
-  const supabase = await createClient();
-  const positions = await getUserPositions(userId);
+export function mergeWatchlistSync(symbols: Symbol[], watchlist: Set<string>) {
+  return symbols.map((s) => ({
+    ...s,
+    inWatchlist: watchlist.has(s.id),
+  }));
+}
 
-  const updated = await Promise.all(
-    positions.map(async (pos) => {
-      const symbol = symbols.find((s) => s.id === pos.symbolId);
-      if (!symbol) return pos;
+export function computeLiveSnapshot(
+  positions: Position[],
+  symbols: Symbol[],
+  accountRow: DbTradingAccount | null
+): { positions: Position[]; account: Account | null } {
+  const updatedPositions = positions.map((pos) => {
+    const symbol = symbols.find((s) => s.id === pos.symbolId);
+    if (!symbol) return pos;
 
-      const currentPrice = pos.side === "buy" ? symbol.bid : symbol.ask;
-      const direction = pos.side === "buy" ? 1 : -1;
-      const pnl = (currentPrice - pos.openPrice) * direction * pos.lots * 100;
+    const currentPrice = pos.side === "buy" ? symbol.bid : symbol.ask;
+    const direction = pos.side === "buy" ? 1 : -1;
+    const pnl = (currentPrice - pos.openPrice) * direction * pos.lots * 100;
 
-      await supabase
-        .from("positions")
-        .update({
-          current_price: currentPrice,
-          pnl: Number(pnl.toFixed(2)),
-        })
-        .eq("id", pos.id);
+    return {
+      ...pos,
+      currentPrice,
+      pnl: Number(pnl.toFixed(2)),
+    };
+  });
 
-      return {
-        ...pos,
-        currentPrice,
-        pnl: Number(pnl.toFixed(2)),
-      };
-    })
+  if (!accountRow) {
+    return { positions: updatedPositions, account: null };
+  }
+
+  const floatingPnl = updatedPositions.reduce((sum, p) => sum + p.pnl, 0);
+  const balance = Number(accountRow.balance);
+  const equity = balance + floatingPnl;
+  const marginUsed = updatedPositions.reduce(
+    (sum, p) => sum + p.lots * p.currentPrice * 0.01,
+    0
   );
+  const freeMargin = Math.max(0, equity - marginUsed);
+  const marginLevel = marginUsed > 0 ? (equity / marginUsed) * 100 : 100;
 
-  const account = await recalcUserAccount(userId, updated);
-  return { positions: updated, account };
+  return {
+    positions: updatedPositions,
+    account: mapAccount({
+      ...accountRow,
+      floating_pnl: floatingPnl,
+      equity,
+      free_margin: freeMargin,
+      margin_level: marginLevel,
+    }),
+  };
+}
+
+export async function getLiveMarketTick(userId: string, symbols: Symbol[]) {
+  const [watchlist, positions, accountRow] = await Promise.all([
+    getUserWatchlistIds(userId),
+    getUserPositions(userId),
+    getUserAccountRow(userId),
+  ]);
+
+  const merged = mergeWatchlistSync(symbols, watchlist);
+  const live = computeLiveSnapshot(positions, merged, accountRow);
+
+  return {
+    symbols: merged,
+    positions: live.positions,
+    account: live.account,
+  };
+}
+
+export async function getFullMarketSnapshot() {
+  const { user, account } = await getAuthenticatedUserData();
+  if (!user) return null;
+
+  const symbols = getSymbols();
+  const [watchlist, positions, trades] = await Promise.all([
+    getUserWatchlistIds(user.id),
+    getUserPositions(user.id),
+    getUserTrades(user.id),
+  ]);
+
+  const merged = mergeWatchlistSync(symbols, watchlist);
+  const accountRow = account ?? (await getUserAccountRow(user.id));
+  const live = computeLiveSnapshot(positions, merged, accountRow);
+
+  return {
+    symbols: merged,
+    positions: live.positions,
+    account: live.account,
+    trades,
+  };
+}
+
+export async function updateUserPositionsPrices(userId: string, symbols: Symbol[]) {
+  const positions = await getUserPositions(userId);
+  const accountRow = await getUserAccountRow(userId);
+  return computeLiveSnapshot(positions, symbols, accountRow);
 }
 
 export async function executeUserTrade(

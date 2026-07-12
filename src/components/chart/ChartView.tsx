@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Account, Position, Symbol } from "@/lib/types";
 import { cn, formatChange, formatPrice } from "@/lib/utils";
+import { useMarketData } from "@/hooks/useMarketData";
 import { TradingChart } from "./TradingChart";
 
 const timeframes = ["Tick", "1m", "15m", "1h", "1D", "1W", "More"];
@@ -27,6 +28,7 @@ interface ChartViewProps {
 }
 
 export function ChartView({ symbol, account, position }: ChartViewProps) {
+  const { refresh } = useMarketData();
   const [activeTab, setActiveTab] = useState("Chart");
   const [activeTf, setActiveTf] = useState("1m");
   const [lots, setLots] = useState(0.1);
@@ -63,6 +65,7 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
         setTradeMsg(data.error ?? "Trade failed");
       } else {
         setTradeMsg(`${side.toUpperCase()} ${lots} lots executed`);
+        await refresh();
       }
     } finally {
       setTrading(false);

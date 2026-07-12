@@ -1,9 +1,19 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { type ReactNode } from "react";
-import { Web3Provider } from "@/components/web3/Web3Provider";
-import { WalletSync } from "@/components/web3/WalletSync";
+import { MarketDataProvider } from "@/context/MarketDataContext";
+
+const Web3Provider = dynamic(
+  () => import("@/components/web3/Web3Provider").then((m) => m.Web3Provider),
+  { ssr: false }
+);
+
+const WalletSync = dynamic(
+  () => import("@/components/web3/WalletSync").then((m) => m.WalletSync),
+  { ssr: false }
+);
 
 export function AppProviders({
   children,
@@ -20,9 +30,11 @@ export function AppProviders({
   }
 
   return (
-    <Web3Provider cookies={cookies}>
-      <WalletSync />
-      {children}
-    </Web3Provider>
+    <MarketDataProvider>
+      <Web3Provider cookies={cookies}>
+        <WalletSync />
+        {children}
+      </Web3Provider>
+    </MarketDataProvider>
   );
 }

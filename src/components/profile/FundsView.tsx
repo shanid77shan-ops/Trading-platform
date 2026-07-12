@@ -1,34 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import type { Account } from "@/lib/types";
+import { useMarketData } from "@/hooks/useMarketData";
 
 export function FundsView() {
-  const [account, setAccount] = useState<Account | null>(null);
+  const { data, loading } = useMarketData();
+  const account = data?.account;
 
-  useEffect(() => {
-    fetch("/api/account")
-      .then((r) => r.json())
-      .then((data) => setAccount(data.account));
-  }, []);
-
-  if (!account) {
+  if (loading && !account) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#26a69a] border-t-transparent" />
+      <div className="min-h-screen px-4 pt-6 pb-20">
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-12 animate-pulse rounded-xl bg-[#111a27]" />
+          ))}
+        </div>
       </div>
     );
   }
+
+  if (!account) return null;
 
   const marginUsed = Math.max(0, account.equity - account.freeMargin);
 
   return (
     <main className="min-h-screen px-4 pb-20 pt-6">
       <Link href="/profile" className="flex items-center gap-2 text-[#8a9bb0]">
-        <ArrowLeft size={18} />
-        <span className="text-sm">Back</span>
+        <span className="text-sm">← Back</span>
       </Link>
       <h1 className="mt-4 text-xl font-semibold text-white">Funds</h1>
       <div className="mt-6 space-y-3">

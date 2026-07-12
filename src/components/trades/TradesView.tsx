@@ -1,33 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { cn, formatChange, formatPrice } from "@/lib/utils";
-import type { Position, Trade } from "@/lib/types";
+import { cn, formatPrice } from "@/lib/utils";
+import { useMarketData } from "@/hooks/useMarketData";
 
 type Tab = "positions" | "history";
 
 export function TradesView() {
+  const { data, loading, refresh } = useMarketData();
   const [tab, setTab] = useState<Tab>("positions");
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState<string | null>(null);
 
-  async function load() {
-    const res = await fetch("/api/trades");
-    if (!res.ok) return;
-    const data = await res.json();
-    setPositions(data.positions ?? []);
-    setTrades(data.trades ?? []);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  const positions = data?.positions ?? [];
+  const trades = data?.trades ?? [];
 
   async function closePosition(positionId: string) {
     setClosing(positionId);
@@ -36,7 +22,7 @@ export function TradesView() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "close", positionId }),
     });
-    await load();
+    await refresh();
     setClosing(null);
   }
 
@@ -45,10 +31,16 @@ export function TradesView() {
     [positions]
   );
 
-  if (loading) {
+  if (loading && !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#26a69a] border-t-transparent" />
+      <div className="min-h-screen px-4 pt-6 pb-20">
+        <div className="h-6 w-24 animate-pulse rounded bg-[#111a27]" />
+        <div className="mt-4 h-20 animate-pulse rounded-xl bg-[#111a27]" />
+        <div className="mt-6 space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-[#111a27]" />
+          ))}
+        </div>
       </div>
     );
   }

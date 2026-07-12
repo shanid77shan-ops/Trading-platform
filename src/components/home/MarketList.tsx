@@ -36,6 +36,7 @@ export function MarketRow({ symbol, showStar, onToggleWatchlist }: MarketRowProp
       )}
       <Link
         href={`/chart/${symbol.ticker.toLowerCase()}`}
+        prefetch
         className="flex min-w-0 flex-1 items-center"
       >
         <div className="flex-1 min-w-0">

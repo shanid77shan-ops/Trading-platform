@@ -1,24 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { TrendingUp, TrendingDown, Search } from "lucide-react";
-import type { Symbol } from "@/lib/types";
+import { useMarketData } from "@/hooks/useMarketData";
 import { cn, formatChange, formatPrice } from "@/lib/utils";
+import type { Symbol } from "@/lib/types";
 
 export function DiscoverView() {
-  const [symbols, setSymbols] = useState<Symbol[]>([]);
+  const { data, loading } = useMarketData();
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch("/api/symbols")
-      .then((r) => r.json())
-      .then((data) => {
-        setSymbols(data.symbols ?? []);
-        setLoading(false);
-      });
-  }, []);
+  const symbols = data?.symbols ?? [];
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -40,11 +33,17 @@ export function DiscoverView() {
     [symbols]
   );
 
-  if (loading) {
+  if (loading && !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#26a69a] border-t-transparent" />
-      </div>
+      <main className="min-h-screen px-4 pt-6 pb-20">
+        <div className="h-6 w-28 animate-pulse rounded bg-[#111a27]" />
+        <div className="mt-4 h-10 animate-pulse rounded-xl bg-[#111a27]" />
+        <div className="mt-6 space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-16 animate-pulse rounded-xl bg-[#111a27]" />
+          ))}
+        </div>
+      </main>
     );
   }
 
@@ -107,6 +106,7 @@ function DiscoverRow({ symbol }: { symbol: Symbol }) {
   return (
     <Link
       href={`/chart/${symbol.ticker.toLowerCase()}`}
+      prefetch
       className="mb-2 flex items-center justify-between rounded-xl border border-[#1a2332] bg-[#111a27] px-4 py-3"
     >
       <div>

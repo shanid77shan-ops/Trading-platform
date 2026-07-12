@@ -1,21 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import type { Account } from "@/lib/types";
+import { useMarketData } from "@/hooks/useMarketData";
 
 export function WithdrawView() {
-  const [account, setAccount] = useState<Account | null>(null);
+  const { data } = useMarketData();
+  const account = data?.account;
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("bank");
   const [status, setStatus] = useState("");
-
-  useEffect(() => {
-    fetch("/api/account")
-      .then((r) => r.json())
-      .then((data) => setAccount(data.account));
-  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,8 +24,7 @@ export function WithdrawView() {
   return (
     <main className="min-h-screen px-4 pb-20 pt-6">
       <Link href="/profile" className="flex items-center gap-2 text-[#8a9bb0]">
-        <ArrowLeft size={18} />
-        <span className="text-sm">Back</span>
+        <span className="text-sm">← Back</span>
       </Link>
       <h1 className="mt-4 text-xl font-semibold text-white">Withdraw</h1>
       {account && (

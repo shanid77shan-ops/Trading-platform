@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { getSymbols, tickPrices } from "@/lib/store";
+import { tickPrices } from "@/lib/store";
 import { getAuthUser } from "@/lib/supabase/user-data";
-import { getLiveMarketTick, mergeWatchlistSync, getUserWatchlistIds } from "@/lib/supabase/trading";
+import { getFullMarketSnapshot, getLiveMarketTick } from "@/lib/supabase/trading";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const tick = searchParams.get("tick");
+  const isTick = searchParams.get("tick") === "1";
 
-  if (tick === "1") {
+  if (isTick) {
     const user = await getAuthUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,12 +18,10 @@ export async function GET(request: Request) {
     return NextResponse.json(snapshot);
   }
 
-  const symbols = getSymbols();
-  const user = await getAuthUser();
-  if (user) {
-    const watchlist = await getUserWatchlistIds(user.id);
-    return NextResponse.json({ symbols: mergeWatchlistSync(symbols, watchlist) });
+  const snapshot = await getFullMarketSnapshot();
+  if (!snapshot) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.json({ symbols });
+  return NextResponse.json(snapshot);
 }

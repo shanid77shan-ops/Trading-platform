@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Gift, Percent, Star, Zap } from "lucide-react";
+import { useMarketData } from "@/hooks/useMarketData";
 import { cn } from "@/lib/utils";
 
 const promotions = [
@@ -44,6 +45,7 @@ const promotions = [
 ];
 
 export function PromoView() {
+  const { refresh } = useMarketData();
   const [claimed, setClaimed] = useState<Set<string>>(new Set());
   const [claiming, setClaiming] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -63,6 +65,7 @@ export function PromoView() {
       if (res.ok) {
         setClaimed((prev) => new Set(prev).add(id));
         setMessage(`$${amount} credited to your account!`);
+        await refresh();
       }
     } else {
       setClaimed((prev) => new Set(prev).add(id));
