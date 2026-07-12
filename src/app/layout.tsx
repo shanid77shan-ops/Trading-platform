@@ -12,7 +12,20 @@ const geist = Geist({
 
 export const metadata: Metadata = {
   title: "TradeHub - Trading Platform",
-  description: "Professional mobile trading platform",
+  description: "Professional mobile trading platform DApp",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "TradeHub",
+  },
+  openGraph: {
+    title: "TradeHub",
+    description: "Professional mobile trading platform DApp",
+    url: process.env.NEXT_PUBLIC_APP_URL ?? "https://trading-app-blue.vercel.app",
+    siteName: "TradeHub",
+    type: "website",
+  },
 };
 
 export const viewport: Viewport = {

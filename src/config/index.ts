@@ -11,9 +11,11 @@ export const networks = [mainnet, polygon] as [
 
 export const metadata = {
   name: "TradeHub",
-  description: "Professional mobile trading platform",
+  description: "Professional mobile trading platform DApp",
   url: process.env.NEXT_PUBLIC_APP_URL ?? "https://trading-app-blue.vercel.app",
-  icons: ["https://avatars.githubusercontent.com/u/179229932"],
+  icons: [
+    `${process.env.NEXT_PUBLIC_APP_URL ?? "https://trading-app-blue.vercel.app"}/icon.svg`,
+  ],
 };
 
 export const wagmiAdapter = new WagmiAdapter({

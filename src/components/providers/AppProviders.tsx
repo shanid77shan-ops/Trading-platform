@@ -15,6 +15,11 @@ const WalletSync = dynamic(
   { ssr: false }
 );
 
+const WalletAutoConnect = dynamic(
+  () => import("@/components/web3/WalletAutoConnect").then((m) => m.WalletAutoConnect),
+  { ssr: false }
+);
+
 export function AppProviders({
   children,
   cookies,
@@ -32,6 +37,7 @@ export function AppProviders({
   return (
     <MarketDataProvider>
       <Web3Provider cookies={cookies}>
+        <WalletAutoConnect />
         <WalletSync />
         {children}
       </Web3Provider>
