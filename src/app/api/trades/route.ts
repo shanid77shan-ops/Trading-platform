@@ -1,14 +1,25 @@
 import { NextResponse } from "next/server";
-import { executeTrade, getPositions, getTrades } from "@/lib/store";
+import { executeTrade } from "@/lib/store";
+import { getAuthenticatedUserData } from "@/lib/supabase/user-data";
 
 export async function GET() {
+  const { user } = await getAuthenticatedUserData();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   return NextResponse.json({
-    positions: getPositions(),
-    trades: getTrades(),
+    positions: [],
+    trades: [],
   });
 }
 
 export async function POST(request: Request) {
+  const { user } = await getAuthenticatedUserData();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
   const { symbolId, side, lots } = body;
 

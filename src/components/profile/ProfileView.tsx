@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   ChevronDown,
@@ -11,6 +12,7 @@ import {
   CreditCard,
   Gift,
   Headphones,
+  LogOut,
   Settings,
   Shield,
   Store,
@@ -23,6 +25,7 @@ import {
 import type { Account, UserProfile } from "@/lib/types";
 import { WalletConnectButton } from "@/components/web3/WalletConnectButton";
 import { useConnectedWallet } from "@/hooks/useConnectedWallet";
+import { createClient } from "@/lib/supabase/client";
 
 interface GridItem {
   label: string;
@@ -77,8 +80,10 @@ function GridSection({ title, items }: { title: string; items: GridItem[] }) {
 }
 
 export function ProfileView() {
+  const router = useRouter();
   const [account, setAccount] = useState<Account | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [email, setEmail] = useState("");
   const [copied, setCopied] = useState(false);
   const [walletCopied, setWalletCopied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -86,17 +91,31 @@ export function ProfileView() {
 
   useEffect(() => {
     fetch("/api/profile")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Unauthorized");
+        return r.json();
+      })
       .then((data) => {
         setAccount(data.account);
         setProfile(data.profile);
+        setEmail(data.email);
         setLoading(false);
+      })
+      .catch(() => {
+        router.push("/auth/login");
       });
-  }, []);
+  }, [router]);
 
-  function copyUid() {
-    if (!profile) return;
-    navigator.clipboard.writeText(profile.uid);
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/auth/login");
+    router.refresh();
+  }
+
+  function copyEmail() {
+    if (!email) return;
+    navigator.clipboard.writeText(email);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -132,17 +151,18 @@ export function ProfileView() {
             <button className="text-[#8a9bb0]">
               <Headphones size={20} />
             </button>
-            <Link href="/admin" className="text-[#8a9bb0]">
-              <Settings size={20} />
-            </Link>
+            <button
+              onClick={handleLogout}
+              className="text-[#8a9bb0]"
+              aria-label="Sign out"
+            >
+              <LogOut size={20} />
+            </button>
           </div>
         </div>
       </header>
 
-      <Link
-        href="#"
-        className="mt-4 flex items-center gap-3 border-b border-[#1a2332] px-4 pb-5"
-      >
+      <div className="mt-4 flex items-center gap-3 border-b border-[#1a2332] px-4 pb-5">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#1a2a3a] text-2xl">
           {profile.avatar}
         </div>
@@ -154,25 +174,20 @@ export function ProfileView() {
             )}
           </div>
           <button
-            onClick={(e) => {
-              e.preventDefault();
-              copyUid();
-            }}
+            onClick={copyEmail}
             className="mt-0.5 flex items-center gap-1.5 text-sm text-[#8a9bb0]"
           >
-            UID: {profile.uid}
+            {email}
             {copied ? (
               <Check size={12} className="text-[#26a69a]" />
             ) : (
               <Copy size={12} />
             )}
           </button>
+          <p className="mt-1 text-xs text-[#5a6a7e]">Account: {account.id}</p>
           {isConnected && address && displayAddress && (
             <button
-              onClick={(e) => {
-                e.preventDefault();
-                copyWallet();
-              }}
+              onClick={copyWallet}
               className="mt-1 flex items-center gap-1.5 text-sm text-[#6b8cae]"
             >
               Wallet: {displayAddress}
@@ -191,10 +206,21 @@ export function ProfileView() {
           )}
         </div>
         <ChevronRight size={20} className="shrink-0 text-[#5a6a7e]" />
-      </Link>
+      </div>
 
       <div className="mt-5 px-4">
         <WalletConnectButton />
+      </div>
+
+      <div className="mx-4 mt-4 rounded-xl border border-[#1a2332] bg-[#111a27] p-4">
+        <p className="text-xs text-[#8a9bb0]">Equity</p>
+        <p className="text-xl font-semibold text-white">
+          {account.equity.toFixed(2)} {account.currency}
+        </p>
+        <div className="mt-2 flex justify-between text-sm">
+          <span className="text-[#ef5350]">PnL: {account.floatingPnl.toFixed(2)}</span>
+          <span className="text-[#26a69a]">Margin: {account.marginLevel.toFixed(2)}%</span>
+        </div>
       </div>
 
       <GridSection title="Assets" items={assetItems} />

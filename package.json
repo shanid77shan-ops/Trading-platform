@@ -11,6 +11,8 @@
   "dependencies": {
     "@reown/appkit": "^1.8.22",
     "@reown/appkit-adapter-wagmi": "^1.8.22",
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.110.2",
     "@tanstack/react-query": "^5.101.2",
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.24.0",

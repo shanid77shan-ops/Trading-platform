@@ -25,7 +25,8 @@ export function BottomNav() {
   if (
     pathname.startsWith("/admin") ||
     pathname.startsWith("/chart") ||
-    pathname.startsWith("/profile/deposit")
+    pathname.startsWith("/profile/deposit") ||
+    pathname.startsWith("/auth")
   ) {
     return null;
   }

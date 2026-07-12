@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { getAccount, updateAccount } from "@/lib/store";
-import type { Account } from "@/lib/types";
+import { getAuthenticatedUserData, mapAccount } from "@/lib/supabase/user-data";
 
 export async function GET() {
-  return NextResponse.json({ account: getAccount() });
-}
+  const { user, account } = await getAuthenticatedUserData();
 
-export async function PATCH(request: Request) {
-  const body = (await request.json()) as Partial<Account>;
-  const account = updateAccount(body);
-  return NextResponse.json({ account });
+  if (!user || !account) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  return NextResponse.json({ account: mapAccount(account) });
 }

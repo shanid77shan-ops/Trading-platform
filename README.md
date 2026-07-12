@@ -11,6 +11,7 @@ A mobile-first trading platform built with Next.js, matching the STARTRADER-styl
 - **Trading** — One-tap buy/sell execution with position tracking
 - **Admin Dashboard** — Manage symbols, account settings, and platform config
 - **Web3 Wallet** — Reown AppKit + Wagmi connection (Mainnet, Polygon)
+- **Supabase Auth** — Email/password signup and login with real user profiles in database
 
 ## Getting Started
 
@@ -19,6 +20,26 @@ cd trading-app
 npm install
 npm run dev
 ```
+
+### Environment Variables
+
+Create `.env.local`:
+
+```
+NEXT_PUBLIC_PROJECT_ID=your_reown_project_id
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### Authentication
+
+1. Open [http://localhost:3000/auth/signup](http://localhost:3000/auth/signup)
+2. Register with **name**, **email**, and **password**
+3. Sign in at [http://localhost:3000/auth/login](http://localhost:3000/auth/login)
+4. Your profile and trading account are saved in Supabase
+
+> If email confirmation is enabled in Supabase, confirm your email before signing in, or disable confirmation in Supabase Auth settings for development.
 
 ### Wallet Connection
 

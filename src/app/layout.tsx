@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import { headers } from "next/headers";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { Web3Provider } from "@/components/web3/Web3Provider";
+import { AppProviders } from "@/components/providers/AppProviders";
 import "./globals.css";
 
 const geist = Geist({
@@ -33,12 +33,12 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${geist.variable} h-full`}>
       <body className="min-h-full bg-[#0b121c] antialiased">
-        <Web3Provider cookies={cookies}>
+        <AppProviders cookies={cookies}>
           <div className="mx-auto min-h-screen max-w-lg bg-[#0b121c]">
             {children}
           </div>
           <BottomNav />
-        </Web3Provider>
+        </AppProviders>
       </body>
     </html>
   );

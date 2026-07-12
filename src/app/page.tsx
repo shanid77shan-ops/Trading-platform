@@ -19,7 +19,7 @@ export default function HomePage() {
     return data.symbols.filter((s) => s.category === category);
   }, [data, category]);
 
-  if (loading || !data) {
+  if (loading || !data?.account) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#26a69a] border-t-transparent" />

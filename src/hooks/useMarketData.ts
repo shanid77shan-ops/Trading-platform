@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Account, Position, Symbol } from "@/lib/types";
 
 interface MarketData {
@@ -10,6 +11,7 @@ interface MarketData {
 }
 
 export function useMarketData(intervalMs = 2000) {
+  const router = useRouter();
   const [data, setData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -17,33 +19,64 @@ export function useMarketData(intervalMs = 2000) {
     let mounted = true;
 
     async function fetchData(tick = false) {
-      const url = tick ? "/api/symbols?tick=1" : "/api/symbols";
-      const res = await fetch(url);
-      const json = await res.json();
+      try {
+        const url = tick ? "/api/symbols?tick=1" : "/api/symbols";
+        const res = await fetch(url);
 
-      if (!mounted) return;
+        if (res.status === 401) {
+          if (mounted) {
+            setLoading(false);
+            router.push("/auth/login");
+          }
+          return;
+        }
 
-      if (tick && json.symbols) {
-        setData((prev) =>
-          prev
-            ? { ...prev, symbols: json.symbols, account: json.account, positions: json.positions }
-            : null
-        );
-      } else {
-        const [accountRes, tradesRes] = await Promise.all([
-          fetch("/api/account"),
-          fetch("/api/trades"),
-        ]);
-        const accountJson = await accountRes.json();
-        const tradesJson = await tradesRes.json();
+        const json = await res.json();
+        if (!mounted) return;
 
-        setData({
-          symbols: json.symbols,
-          account: accountJson.account,
-          positions: tradesJson.positions,
-        });
+        if (tick && json.symbols) {
+          setData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  symbols: json.symbols,
+                  account: json.account ?? prev.account,
+                  positions: json.positions ?? prev.positions,
+                }
+              : null
+          );
+        } else {
+          const [accountRes, tradesRes] = await Promise.all([
+            fetch("/api/account"),
+            fetch("/api/trades"),
+          ]);
+
+          if (accountRes.status === 401) {
+            if (mounted) {
+              setLoading(false);
+              router.push("/auth/login");
+            }
+            return;
+          }
+
+          const accountJson = await accountRes.json();
+          const tradesJson = await tradesRes.json();
+
+          if (!accountJson.account) {
+            if (mounted) setLoading(false);
+            return;
+          }
+
+          setData({
+            symbols: json.symbols,
+            account: accountJson.account,
+            positions: tradesJson.positions ?? [],
+          });
+        }
+        if (mounted) setLoading(false);
+      } catch {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
     }
 
     fetchData();
@@ -52,7 +85,7 @@ export function useMarketData(intervalMs = 2000) {
       mounted = false;
       clearInterval(interval);
     };
-  }, [intervalMs]);
+  }, [intervalMs, router]);
 
   return { data, loading };
 }
