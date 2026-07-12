@@ -9,7 +9,7 @@ import type { AssetCategory } from "@/lib/types";
 
 export default function HomePage() {
   const [category, setCategory] = useState<AssetCategory | "watchlist">("watchlist");
-  const { data, loading } = useMarketData();
+  const { data, loading, refresh } = useMarketData();
 
   const filteredSymbols = useMemo(() => {
     if (!data) return [];
@@ -34,7 +34,9 @@ export default function HomePage() {
       <CategoryTabs active={category} onChange={setCategory} />
       <MarketList
         symbols={filteredSymbols}
+        allSymbols={data.symbols}
         showAddButton={category === "watchlist"}
+        onWatchlistChange={refresh}
       />
     </main>
   );

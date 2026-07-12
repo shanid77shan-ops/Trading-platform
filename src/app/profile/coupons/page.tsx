@@ -1,5 +1,5 @@
 import { PromoView } from "@/components/promo/PromoView";
 
-export default function PromoPage() {
+export default function CouponsPage() {
   return <PromoView />;
 }

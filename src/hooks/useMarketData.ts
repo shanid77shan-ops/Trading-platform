@@ -87,7 +87,31 @@ export function useMarketData(intervalMs = 2000) {
     };
   }, [intervalMs, router]);
 
-  return { data, loading };
+  async function refresh() {
+    try {
+      const res = await fetch("/api/symbols");
+      if (!res.ok) return;
+      const json = await res.json();
+      const [accountRes, tradesRes] = await Promise.all([
+        fetch("/api/account"),
+        fetch("/api/trades"),
+      ]);
+      if (!accountRes.ok) return;
+      const accountJson = await accountRes.json();
+      const tradesJson = await tradesRes.json();
+      if (accountJson.account) {
+        setData({
+          symbols: json.symbols,
+          account: accountJson.account,
+          positions: tradesJson.positions ?? [],
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return { data, loading, refresh };
 }
 
 export function useSymbol(symbolId: string) {

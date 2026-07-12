@@ -36,13 +36,13 @@ interface GridItem {
 
 const assetItems: GridItem[] = [
   { label: "Deposit", icon: CreditCard, href: "/profile/deposit" },
-  { label: "Transfer", icon: Wallet, href: "#" },
-  { label: "Withdraw", icon: FolderOutput, href: "#" },
-  { label: "Funds", icon: Coins, href: "#" },
+  { label: "Transfer", icon: Wallet, href: "/profile/transfer" },
+  { label: "Withdraw", icon: FolderOutput, href: "/profile/withdraw" },
+  { label: "Funds", icon: Coins, href: "/profile/funds" },
 ];
 
 const rewardItems: GridItem[] = [
-  { label: "Coupons", icon: TicketPercent, href: "#" },
+  { label: "Coupons", icon: TicketPercent, href: "/profile/coupons" },
 ];
 
 const otherItems: GridItem[] = [

@@ -31,18 +31,39 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
   const [activeTf, setActiveTf] = useState("1m");
   const [lots, setLots] = useState(0.1);
   const [trading, setTrading] = useState(false);
+  const [inWatchlist, setInWatchlist] = useState(symbol.inWatchlist);
+  const [tradeMsg, setTradeMsg] = useState("");
 
   const isUp = symbol.changePercent >= 0;
   const spread = Math.round((symbol.ask - symbol.bid) * (symbol.price > 100 ? 100 : 10000));
 
+  async function toggleWatchlist() {
+    const res = await fetch("/api/watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbolId: symbol.id }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setInWatchlist(data.inWatchlist);
+    }
+  }
+
   async function handleTrade(side: "buy" | "sell") {
     setTrading(true);
+    setTradeMsg("");
     try {
-      await fetch("/api/trades", {
+      const res = await fetch("/api/trades", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbolId: symbol.id, side, lots }),
       });
+      const data = await res.json();
+      if (!res.ok) {
+        setTradeMsg(data.error ?? "Trade failed");
+      } else {
+        setTradeMsg(`${side.toUpperCase()} ${lots} lots executed`);
+      }
     } finally {
       setTrading(false);
     }
@@ -62,7 +83,12 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
             </button>
           </div>
           <div className="flex items-center gap-4 text-[#8a9bb0]">
-            <Heart size={18} />
+            <button onClick={toggleWatchlist} aria-label="Toggle watchlist">
+              <Heart
+                size={18}
+                className={cn(inWatchlist && "fill-[#ef5350] text-[#ef5350]")}
+              />
+            </button>
             <Bell size={18} />
             <Share2 size={18} />
           </div>
@@ -213,6 +239,18 @@ export function ChartView({ symbol, account, position }: ChartViewProps) {
           <span>Free Margin: {account.freeMargin.toFixed(2)} {account.currency}</span>
           <span className="text-[#26a69a]">{account.marginLevel.toFixed(2)}%</span>
         </div>
+        {tradeMsg && (
+          <p
+            className={cn(
+              "mt-2 text-center text-xs",
+              tradeMsg.includes("failed") || tradeMsg.includes("Insufficient")
+                ? "text-[#ef5350]"
+                : "text-[#26a69a]"
+            )}
+          >
+            {tradeMsg}
+          </p>
+        )}
       </div>
     </div>
   );
