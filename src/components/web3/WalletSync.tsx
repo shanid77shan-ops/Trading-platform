@@ -13,6 +13,8 @@ export function WalletSync() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ wallet_address: address }),
+    }).catch(() => {
+      /* ignore sync errors */
     });
   }, [address, isConnected]);
 
