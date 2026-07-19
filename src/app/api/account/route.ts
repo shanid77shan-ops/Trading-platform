@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUserData, mapAccount } from "@/lib/supabase/user-data";
-import { creditUserBalance } from "@/lib/supabase/trading";
+import { getAuthenticatedUserData, mapAccount } from "@/lib/db/user-data";
+import { creditUserBalance } from "@/lib/db/trading";
 
 export async function GET() {
   const { user, account } = await getAuthenticatedUserData();

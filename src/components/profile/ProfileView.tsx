@@ -25,7 +25,6 @@ import {
 import type { Account, UserProfile } from "@/lib/types";
 import { WalletConnectButton } from "@/components/web3/WalletConnectButton";
 import { useConnectedWallet } from "@/hooks/useConnectedWallet";
-import { createClient } from "@/lib/supabase/client";
 
 interface GridItem {
   label: string;
@@ -107,8 +106,7 @@ export function ProfileView() {
   }, [router]);
 
   async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await fetch("/api/auth/logout", { method: "POST" });
     router.push("/auth/login");
     router.refresh();
   }

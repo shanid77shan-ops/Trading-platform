@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUserData } from "@/lib/supabase/user-data";
-import { toggleUserWatchlist } from "@/lib/supabase/trading";
+import { getAuthenticatedUserData } from "@/lib/db/user-data";
+import { toggleUserWatchlist } from "@/lib/db/trading";
 
 export async function POST(request: Request) {
   const { user } = await getAuthenticatedUserData();

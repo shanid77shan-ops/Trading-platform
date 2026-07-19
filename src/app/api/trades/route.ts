@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUserData } from "@/lib/supabase/user-data";
+import { getAuthenticatedUserData } from "@/lib/db/user-data";
 import {
   closeUserPosition,
   executeEntrustTrade,
   executeUserTrade,
   getUserPositions,
   getUserTrades,
-} from "@/lib/supabase/trading";
+} from "@/lib/db/trading";
 
 export async function GET() {
   const { user } = await getAuthenticatedUserData();

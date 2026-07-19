@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSymbols, tickPrices } from "@/lib/store";
-import { getAuthUser } from "@/lib/supabase/user-data";
-import { getLiveMarketTick, mergeWatchlistSync, getUserWatchlistIds } from "@/lib/supabase/trading";
+import { getAuthUser } from "@/lib/db/user-data";
+import { getLiveMarketTick, mergeWatchlistSync, getUserWatchlistIds } from "@/lib/db/trading";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

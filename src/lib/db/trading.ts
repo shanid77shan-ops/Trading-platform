@@ -1,8 +1,12 @@
-import { createClient } from "@/lib/supabase/server";
+import { sql } from "@/lib/db";
 import { getSymbol, getSymbols } from "@/lib/store";
 import type { Account, Position, Symbol, Trade } from "@/lib/types";
-import { getAuthenticatedUserData, getAuthUser, getUserAccountRow, mapAccount } from "./user-data";
-import type { DbTradingAccount } from "./user-data";
+import {
+  getAuthenticatedUserData,
+  getUserAccountRow,
+  mapAccount,
+  type DbTradingAccount,
+} from "./user-data";
 
 function mapPosition(row: {
   id: string;
@@ -51,12 +55,10 @@ function mapTrade(row: {
 }
 
 export async function getUserWatchlistIds(userId: string) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("watchlist")
-    .select("symbol_id")
-    .eq("user_id", userId);
-  return new Set((data ?? []).map((r) => r.symbol_id));
+  const rows = await sql<{ symbol_id: string }>`
+    SELECT symbol_id FROM watchlist WHERE user_id = ${userId}
+  `;
+  return new Set(rows.map((r) => r.symbol_id));
 }
 
 export async function mergeWatchlist(symbols: Symbol[], userId: string) {
@@ -68,53 +70,68 @@ export async function mergeWatchlist(symbols: Symbol[], userId: string) {
 }
 
 export async function toggleUserWatchlist(userId: string, symbolId: string) {
-  const supabase = await createClient();
   const watchlist = await getUserWatchlistIds(userId);
 
   if (watchlist.has(symbolId)) {
-    await supabase
-      .from("watchlist")
-      .delete()
-      .eq("user_id", userId)
-      .eq("symbol_id", symbolId);
+    await sql`
+      DELETE FROM watchlist
+      WHERE user_id = ${userId} AND symbol_id = ${symbolId}
+    `;
     return false;
   }
 
-  await supabase.from("watchlist").insert({ user_id: userId, symbol_id: symbolId });
+  await sql`
+    INSERT INTO watchlist (user_id, symbol_id)
+    VALUES (${userId}, ${symbolId})
+  `;
   return true;
 }
 
 export async function getUserPositions(userId: string) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("positions")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  return (data ?? []).map(mapPosition);
+  const rows = await sql<{
+    id: string;
+    symbol_id: string;
+    ticker: string;
+    side: string;
+    lots: number;
+    open_price: number;
+    current_price: number;
+    pnl: number;
+    amount?: number | null;
+    expires_at?: string | null;
+  }>`
+    SELECT * FROM positions
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+  `;
+  return rows.map(mapPosition);
 }
 
 export async function getUserTrades(userId: string) {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("trade_history")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  return (data ?? []).map(mapTrade);
+  const rows = await sql<{
+    id: string;
+    symbol_id: string;
+    ticker: string;
+    side: string;
+    lots: number;
+    price: number;
+    created_at: string;
+  }>`
+    SELECT * FROM trade_history
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+    LIMIT 50
+  `;
+  return rows.map(mapTrade);
 }
 
 async function recalcUserAccount(userId: string, positions: Position[]) {
-  const supabase = await createClient();
   const floatingPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
 
-  const { data: account } = await supabase
-    .from("trading_accounts")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
-
+  const accounts = await sql<DbTradingAccount>`
+    SELECT * FROM trading_accounts WHERE user_id = ${userId} LIMIT 1
+  `;
+  const account = accounts[0];
   if (!account) return null;
 
   const balance = Number(account.balance);
@@ -123,15 +140,16 @@ async function recalcUserAccount(userId: string, positions: Position[]) {
   const freeMargin = Math.max(0, equity - marginUsed);
   const marginLevel = marginUsed > 0 ? (equity / marginUsed) * 100 : 100;
 
-  await supabase
-    .from("trading_accounts")
-    .update({
-      floating_pnl: Number(floatingPnl.toFixed(2)),
-      equity: Number(equity.toFixed(2)),
-      free_margin: Number(freeMargin.toFixed(2)),
-      margin_level: Number(marginLevel.toFixed(2)),
-    })
-    .eq("user_id", userId);
+  await sql`
+    UPDATE trading_accounts
+    SET
+      floating_pnl = ${Number(floatingPnl.toFixed(2))},
+      equity = ${Number(equity.toFixed(2))},
+      free_margin = ${Number(freeMargin.toFixed(2))},
+      margin_level = ${Number(marginLevel.toFixed(2))},
+      updated_at = now()
+    WHERE user_id = ${userId}
+  `;
 
   return mapAccount({
     ...account,
@@ -196,16 +214,14 @@ export function computeLiveSnapshot(
 }
 
 export async function closeExpiredPositions(userId: string) {
-  const supabase = await createClient();
-  const now = new Date().toISOString();
-  const { data: expired } = await supabase
-    .from("positions")
-    .select("id")
-    .eq("user_id", userId)
-    .not("expires_at", "is", null)
-    .lte("expires_at", now);
+  const expired = await sql<{ id: string }>`
+    SELECT id FROM positions
+    WHERE user_id = ${userId}
+      AND expires_at IS NOT NULL
+      AND expires_at <= now()
+  `;
 
-  for (const position of expired ?? []) {
+  for (const position of expired) {
     await closeUserPosition(userId, position.id);
   }
 }
@@ -230,20 +246,21 @@ export async function getLiveMarketTick(userId: string, symbols: Symbol[]) {
 }
 
 export async function getFullMarketSnapshot() {
-  const { user, account } = await getAuthenticatedUserData();
-  if (!user) return null;
+  const auth = await getAuthenticatedUserData();
+  if (!auth.user) return null;
 
-  await closeExpiredPositions(user.id);
+  const userId = auth.user.id;
+  await closeExpiredPositions(userId);
 
   const symbols = getSymbols();
   const [watchlist, positions, trades] = await Promise.all([
-    getUserWatchlistIds(user.id),
-    getUserPositions(user.id),
-    getUserTrades(user.id),
+    getUserWatchlistIds(userId),
+    getUserPositions(userId),
+    getUserTrades(userId),
   ]);
 
   const merged = mergeWatchlistSync(symbols, watchlist);
-  const accountRow = account ?? (await getUserAccountRow(user.id));
+  const accountRow = auth.account ?? (await getUserAccountRow(userId));
   const live = computeLiveSnapshot(positions, merged, accountRow);
 
   return {
@@ -269,65 +286,65 @@ export async function executeUserTrade(
   const symbol = getSymbol(symbolId);
   if (!symbol) return { success: false, error: "Symbol not found" };
 
-  const supabase = await createClient();
   const price = side === "buy" ? symbol.ask : symbol.bid;
   const marginRequired = price * lots * 0.01;
 
-  const { data: account } = await supabase
-    .from("trading_accounts")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
+  const accounts = await sql<DbTradingAccount>`
+    SELECT * FROM trading_accounts WHERE user_id = ${userId} LIMIT 1
+  `;
+  const account = accounts[0];
 
   if (!account || Number(account.free_margin) < marginRequired) {
     return { success: false, error: "Insufficient margin" };
   }
 
-  const { data: tradeRow } = await supabase
-    .from("trade_history")
-    .insert({
-      user_id: userId,
-      symbol_id: symbol.id,
-      ticker: symbol.ticker,
-      side,
-      lots,
-      price,
-    })
-    .select("*")
-    .single();
+  const tradeRows = await sql<{
+    id: string;
+    symbol_id: string;
+    ticker: string;
+    side: string;
+    lots: number;
+    price: number;
+    created_at: string;
+  }>`
+    INSERT INTO trade_history (user_id, symbol_id, ticker, side, lots, price)
+    VALUES (${userId}, ${symbol.id}, ${symbol.ticker}, ${side}, ${lots}, ${price})
+    RETURNING *
+  `;
+  const tradeRow = tradeRows[0];
 
-  const { data: existing } = await supabase
-    .from("positions")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("symbol_id", symbol.id)
-    .eq("side", side)
-    .maybeSingle();
+  const existing = await sql<{
+    id: string;
+    lots: number;
+    open_price: number;
+  }>`
+    SELECT * FROM positions
+    WHERE user_id = ${userId}
+      AND symbol_id = ${symbol.id}
+      AND side = ${side}
+    LIMIT 1
+  `;
 
-  if (existing) {
-    const totalLots = Number(existing.lots) + lots;
+  if (existing[0]) {
+    const row = existing[0];
+    const totalLots = Number(row.lots) + lots;
     const avgPrice =
-      (Number(existing.open_price) * Number(existing.lots) + price * lots) / totalLots;
+      (Number(row.open_price) * Number(row.lots) + price * lots) / totalLots;
 
-    await supabase
-      .from("positions")
-      .update({
-        lots: totalLots,
-        open_price: avgPrice,
-        current_price: price,
-      })
-      .eq("id", existing.id);
+    await sql`
+      UPDATE positions
+      SET lots = ${totalLots}, open_price = ${avgPrice}, current_price = ${price}, updated_at = now()
+      WHERE id = ${row.id}
+    `;
   } else {
-    await supabase.from("positions").insert({
-      user_id: userId,
-      symbol_id: symbol.id,
-      ticker: symbol.ticker,
-      side,
-      lots,
-      open_price: price,
-      current_price: price,
-      pnl: 0,
-    });
+    await sql`
+      INSERT INTO positions (
+        user_id, symbol_id, ticker, side, lots, open_price, current_price, pnl
+      )
+      VALUES (
+        ${userId}, ${symbol.id}, ${symbol.ticker}, ${side}, ${lots}, ${price}, ${price}, ${0}
+      )
+    `;
   }
 
   const positions = await getUserPositions(userId);
@@ -357,50 +374,55 @@ export async function executeEntrustTrade(
   const symbol = getSymbol(symbolId);
   if (!symbol) return { success: false, error: "Symbol not found" };
 
-  const supabase = await createClient();
   const price = side === "buy" ? symbol.ask : symbol.bid;
   const lots = amount / (price * 0.01);
   const expiresAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
 
-  const { data: account } = await supabase
-    .from("trading_accounts")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
+  const accounts = await sql<DbTradingAccount>`
+    SELECT * FROM trading_accounts WHERE user_id = ${userId} LIMIT 1
+  `;
+  const account = accounts[0];
 
   if (!account || Number(account.free_margin) < amount) {
     return { success: false, error: "Insufficient margin" };
   }
 
-  const { data: tradeRow } = await supabase
-    .from("trade_history")
-    .insert({
-      user_id: userId,
-      symbol_id: symbol.id,
-      ticker: symbol.ticker,
-      side,
-      lots,
-      price,
-    })
-    .select("*")
-    .single();
+  const tradeRows = await sql<{
+    id: string;
+    symbol_id: string;
+    ticker: string;
+    side: string;
+    lots: number;
+    price: number;
+    created_at: string;
+  }>`
+    INSERT INTO trade_history (user_id, symbol_id, ticker, side, lots, price)
+    VALUES (${userId}, ${symbol.id}, ${symbol.ticker}, ${side}, ${lots}, ${price})
+    RETURNING *
+  `;
+  const tradeRow = tradeRows[0];
 
-  const { data: positionRow } = await supabase
-    .from("positions")
-    .insert({
-      user_id: userId,
-      symbol_id: symbol.id,
-      ticker: symbol.ticker,
-      side,
-      lots,
-      open_price: price,
-      current_price: price,
-      pnl: 0,
-      amount,
-      expires_at: expiresAt,
-    })
-    .select("*")
-    .single();
+  const positionRows = await sql<{
+    id: string;
+    symbol_id: string;
+    ticker: string;
+    side: string;
+    lots: number;
+    open_price: number;
+    current_price: number;
+    pnl: number;
+    amount?: number | null;
+    expires_at?: string | null;
+  }>`
+    INSERT INTO positions (
+      user_id, symbol_id, ticker, side, lots, open_price, current_price, pnl, amount, expires_at
+    )
+    VALUES (
+      ${userId}, ${symbol.id}, ${symbol.ticker}, ${side}, ${lots}, ${price}, ${price}, ${0}, ${amount}, ${expiresAt}
+    )
+    RETURNING *
+  `;
+  const positionRow = positionRows[0];
 
   const positions = await getUserPositions(userId);
   await recalcUserAccount(userId, positions);
@@ -414,13 +436,19 @@ export async function executeEntrustTrade(
 }
 
 export async function closeUserPosition(userId: string, positionId: string) {
-  const supabase = await createClient();
-  const { data: position } = await supabase
-    .from("positions")
-    .select("*")
-    .eq("id", positionId)
-    .eq("user_id", userId)
-    .single();
+  const rows = await sql<{
+    id: string;
+    symbol_id: string;
+    ticker: string;
+    side: string;
+    lots: number;
+    open_price: number;
+  }>`
+    SELECT * FROM positions
+    WHERE id = ${positionId} AND user_id = ${userId}
+    LIMIT 1
+  `;
+  const position = rows[0];
 
   if (!position) return { success: false, error: "Position not found" };
 
@@ -439,29 +467,27 @@ export async function closeUserPosition(userId: string, positionId: string) {
     ).toFixed(2)
   );
 
-  await supabase.from("trade_history").insert({
-    user_id: userId,
-    symbol_id: position.symbol_id,
-    ticker: position.ticker,
-    side: closeSide,
-    lots: position.lots,
-    price,
-  });
+  await sql`
+    INSERT INTO trade_history (user_id, symbol_id, ticker, side, lots, price)
+    VALUES (
+      ${userId}, ${position.symbol_id}, ${position.ticker}, ${closeSide}, ${position.lots}, ${price}
+    )
+  `;
 
-  const { data: account } = await supabase
-    .from("trading_accounts")
-    .select("balance")
-    .eq("user_id", userId)
-    .single();
+  const accounts = await sql<{ balance: number }>`
+    SELECT balance FROM trading_accounts WHERE user_id = ${userId} LIMIT 1
+  `;
+  const account = accounts[0];
 
   if (account) {
-    await supabase
-      .from("trading_accounts")
-      .update({ balance: Number(account.balance) + pnl })
-      .eq("user_id", userId);
+    await sql`
+      UPDATE trading_accounts
+      SET balance = ${Number(account.balance) + pnl}, updated_at = now()
+      WHERE user_id = ${userId}
+    `;
   }
 
-  await supabase.from("positions").delete().eq("id", positionId);
+  await sql`DELETE FROM positions WHERE id = ${positionId}`;
 
   const positions = await getUserPositions(userId);
   await recalcUserAccount(userId, positions);
@@ -476,21 +502,20 @@ export async function getTradingSnapshot(userId: string, symbols: Symbol[]) {
 }
 
 export async function creditUserBalance(userId: string, amount: number) {
-  const supabase = await createClient();
-  const { data: account } = await supabase
-    .from("trading_accounts")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
+  const accounts = await sql<DbTradingAccount>`
+    SELECT * FROM trading_accounts WHERE user_id = ${userId} LIMIT 1
+  `;
+  const account = accounts[0];
 
   if (!account) return { success: false, error: "Account not found" };
 
   const balance = Number(account.balance) + amount;
 
-  await supabase
-    .from("trading_accounts")
-    .update({ balance: Number(balance.toFixed(2)) })
-    .eq("user_id", userId);
+  await sql`
+    UPDATE trading_accounts
+    SET balance = ${Number(balance.toFixed(2))}, updated_at = now()
+    WHERE user_id = ${userId}
+  `;
 
   const positions = await getUserPositions(userId);
   const updated = await recalcUserAccount(userId, positions);

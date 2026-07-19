@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
 export function SignupForm() {
   const router = useRouter();
@@ -11,33 +10,27 @@ export function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
-    setMessage("");
 
     try {
-      const supabase = createClient();
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: { full_name: name.trim() },
-        },
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: name.trim(),
+          email: email.trim(),
+          password,
+        }),
       });
+      const json = await res.json();
 
-      if (signUpError) {
-        setError(signUpError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (data.user && !data.session) {
-        setMessage("Account created. Check your email to confirm, then sign in.");
+      if (!res.ok) {
+        setError(json.error ?? "Sign up failed");
         setLoading(false);
         return;
       }
@@ -95,7 +88,6 @@ export function SignupForm() {
           </div>
 
           {error && <p className="text-sm text-[#ef5350]">{error}</p>}
-          {message && <p className="text-sm text-[#26a69a]">{message}</p>}
 
           <button
             type="submit"
