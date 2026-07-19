@@ -73,7 +73,7 @@ async function ensureUserRecords(user: { id: string; email: string; fullName?: s
     const accountNumber = String(Math.floor(Math.random() * 100000000)).padStart(8, "0");
     accounts = await sql<DbTradingAccount>`
       INSERT INTO trading_accounts (user_id, account_number, balance, equity, free_margin)
-      VALUES (${user.id}, ${accountNumber}, ${0}, ${0}, ${0})
+      VALUES (${user.id}, ${accountNumber}, ${10000}, ${10000}, ${10000})
       RETURNING *
     `;
   }

@@ -21,7 +21,7 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const { deposit } = body;
 
-  if (typeof deposit !== "number" || deposit <= 0 || deposit > 1000) {
+  if (typeof deposit !== "number" || deposit <= 0 || deposit > 10000) {
     return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
   }
 

@@ -35,7 +35,7 @@ export async function registerUser(input: {
 
   await sql`
     INSERT INTO trading_accounts (user_id, account_number, balance, equity, free_margin)
-    VALUES (${user.id}, ${accountNumber}, ${0}, ${0}, ${0})
+    VALUES (${user.id}, ${accountNumber}, ${10000}, ${10000}, ${10000})
   `;
 
   const sessionUser = { id: user.id, email: user.email };
